@@ -37,6 +37,15 @@ def get_menu_minuman(db: Session = Depends(get_db)):
         models.MenuItem.tersedia == True
     ).all()
 
+@router.get("/search", response_model=List[schemas.MenuItemResponse])
+def search_menu(
+    nama: str = Query(..., description="Nama menu yang dicari"),
+    db: Session = Depends(get_db)
+):
+    return db.query(models.MenuItem).filter(
+        models.MenuItem.nama.ilike(f"%{nama}%")
+    ).all()
+
 @router.get("/{menu_id}", response_model=schemas.MenuItemResponse, summary="Ambil detail menu")
 def get_menu_by_id(menu_id: int, db: Session = Depends(get_db)):
     """Ambil detail menu berdasarkan ID."""
