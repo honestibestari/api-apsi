@@ -13,6 +13,8 @@ build/
 venv/
 env/
 .venv/
+
+# Environment variables — jangan push secret/config lokal
 .env
 
 # Database — jangan push file .db
