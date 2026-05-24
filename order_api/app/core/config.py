@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     # Default: SQLite lokal di folder order_api.
     database_url: str = "sqlite:///./store.db"
 
+    # ─── Frontend ────────────────────────────────────────
+    # URL frontend yang dituju setelah scan QR dining table.
+    frontend_url: str = "http://localhost:3000"
+
     # ─── CORS ────────────────────────────────────────────
     # Daftar origin dipisah koma, mis. "http://localhost:3000,http://localhost:5173"
     cors_origins: str = "*"

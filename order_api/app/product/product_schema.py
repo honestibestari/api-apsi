@@ -29,7 +29,7 @@ class ProductDetail(ProductBase):
     id: int
     merchant_id: int
     created_at: datetime
-    # Forward reference; di-resolve di app/schemas/__init__.py untuk menghindari
+    # Forward reference; di-resolve di app/__init__.py untuk menghindari
     # circular import dengan modul merchant.
     merchant: "MerchantSummary"
 
