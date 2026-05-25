@@ -1,19 +1,29 @@
-"""Logika bisnis untuk Merchant."""
-from typing import List
-
+from typing import List, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
-
 from app.merchant.merchant_model import Merchant
+from app.merchant.merchant_schema import MerchantCreate, MerchantUpdate
 
 
-def get_merchants(db: Session) -> List[Merchant]:
-    """Ambil semua merchant, diurutkan berdasarkan nama."""
-    return db.query(Merchant).order_by(Merchant.nama).all()
+def get_merchants(db: Session, offset: int = 0, limit: int = 20, search: Optional[str] = None) -> List[Merchant]:
+    """Ambil daftar merchant dengan optional pagination & pencarian nama.
+
+    Args:
+        offset:   Offset (untuk pagination). Default 0.
+        limit:  Jumlah maksimum record. Default 20, maks 100.
+        search: Substring pencarian pada kolom 'nama' (case-insensitive).
+    """
+    limit = min(limit, 100)  
+    query = db.query(Merchant).order_by(Merchant.nama)
+
+    if search:
+        query = query.filter(Merchant.nama.ilike(f"%{search}%"))
+
+    return query.offset(offset).limit(limit).all()
 
 
 def get_merchant_or_404(db: Session, merchant_id: int) -> Merchant:
-    """Ambil satu merchant (beserta relasi products) atau 404 bila tidak ada."""
+    """Ambil satu merchant atau 404 bila tidak ada."""
     merchant = db.query(Merchant).filter(Merchant.id == merchant_id).first()
     if not merchant:
         raise HTTPException(
@@ -21,3 +31,40 @@ def get_merchant_or_404(db: Session, merchant_id: int) -> Merchant:
             detail=f"Merchant dengan ID {merchant_id} tidak ditemukan",
         )
     return merchant
+
+
+def create_merchant(db: Session, data: MerchantCreate) -> Merchant:
+    """Buat merchant baru dan simpan ke database.
+    Duplikat nama diizinkan (merchant berbeda bisa punya nama mirip), tapi bisa ditambahkan validasi unik di sini jika diperlukan.
+    """
+    merchant = Merchant(nama=data.nama, deskripsi=data.deskripsi, alamat=data.alamat)
+    db.add(merchant)
+    db.commit()
+    db.refresh(merchant) 
+    return merchant
+
+
+def update_merchant(db: Session, merchant_id: int, data: MerchantUpdate) -> Merchant:
+    """Update field merchant yang dikirim (partial update).
+    Hanya field yang tidak None di `data` yang akan diubah, sehingga client bisa kirim hanya field yang ingin diperbarui.
+    """
+    merchant = get_merchant_or_404(db, merchant_id)
+
+    update_fields = data.model_dump(exclude_unset=True)
+    for field, value in update_fields.items():
+        setattr(merchant, field, value)
+
+    db.commit()
+    db.refresh(merchant)
+    return merchant
+
+
+def delete_merchant(db: Session, merchant_id: int) -> dict:
+    """Hapus merchant beserta semua product-nya (cascade sudah di-set di model)."""
+    merchant = get_merchant_or_404(db, merchant_id)
+    nama = merchant.nama
+
+    db.delete(merchant)
+    db.commit()
+
+    return {"message": f"Merchant '{nama}' berhasil dihapus", "id": merchant_id}
