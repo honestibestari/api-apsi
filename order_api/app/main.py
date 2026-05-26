@@ -7,6 +7,7 @@ from app.db.seed import seed_data
 from app.dining_table.dining_table_router import router as dining_table_router
 from app.merchant.merchant_router import router as merchant_router
 from app.product.product_router import router as product_router
+from app.order.order_router import router as order_router
 
 # Buat tabel (jika belum ada) lalu isi data awal.
 Base.metadata.create_all(bind=engine)
@@ -38,6 +39,7 @@ app.add_middleware(
 app.include_router(product_router)
 app.include_router(merchant_router)
 app.include_router(dining_table_router)
+app.include_router(order_router)
 
 
 @app.get("/", tags=["Root"])
