@@ -1,1 +1,0 @@
-"""Domain order — model, schema, service, router."""

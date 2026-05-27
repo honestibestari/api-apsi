@@ -37,10 +37,10 @@ def create_merchant(db: Session, data: MerchantCreate) -> Merchant:
     """Buat merchant baru dan simpan ke database.
     Duplikat nama diizinkan (merchant berbeda bisa punya nama mirip), tapi bisa ditambahkan validasi unik di sini jika diperlukan.
     """
-    merchant = Merchant(nama=data.nama, deskripsi=data.deskripsi, alamat=data.alamat)
+    merchant = Merchant(**data.model_dump())
     db.add(merchant)
     db.commit()
-    db.refresh(merchant) 
+    db.refresh(merchant)
     return merchant
 
 

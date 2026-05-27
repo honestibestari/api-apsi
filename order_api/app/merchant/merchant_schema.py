@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from app.merchant.merchant_model import MerchantStatus
 from app.product.product_schema import ProductSummary
 
 
@@ -12,6 +13,12 @@ class MerchantCreate(BaseModel):
     nama: str
     deskripsi: Optional[str] = None
     alamat: Optional[str] = None
+    owner: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    block: Optional[str] = None
+    category: Optional[str] = None
+    status: MerchantStatus = MerchantStatus.PENDING
 
     @field_validator("nama")
     @classmethod
@@ -25,11 +32,18 @@ class MerchantCreate(BaseModel):
 class MerchantUpdate(BaseModel):
     """Body request untuk update merchant (PUT /merchants/{id}).
     Semua field opsional → client hanya kirim field yang berubah (partial update).
+    Untuk approve/suspend dari admin cukup kirim { "status": "active" }.
     """
 
     nama: Optional[str] = None
     deskripsi: Optional[str] = None
     alamat: Optional[str] = None
+    owner: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    block: Optional[str] = None
+    category: Optional[str] = None
+    status: Optional[MerchantStatus] = None
 
     @field_validator("nama")
     @classmethod
@@ -41,13 +55,26 @@ class MerchantUpdate(BaseModel):
         return v
 
 
-# Output 
+# Output
 class MerchantSummary(BaseModel):
-    """Bentuk ringkas untuk list merchant / nested di dalam detail product."""
+    """Bentuk ringkas untuk list merchant / nested di dalam detail product.
+    Mencakup profil & ringkasan finansial yang dipakai konsol admin.
+    """
 
     id: int
     nama: str
     alamat: Optional[str] = None
+    owner: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    block: Optional[str] = None
+    category: Optional[str] = None
+    status: MerchantStatus
+    rating: float
+    total_orders: int
+    total_revenue: float
+    balance: float
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -59,6 +86,16 @@ class MerchantDetail(BaseModel):
     nama: str
     deskripsi: Optional[str] = None
     alamat: Optional[str] = None
+    owner: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    block: Optional[str] = None
+    category: Optional[str] = None
+    status: MerchantStatus
+    rating: float
+    total_orders: int
+    total_revenue: float
+    balance: float
     created_at: datetime
     products: List[ProductSummary] = []
 

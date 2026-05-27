@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.routing import APIRoute
 
 from app.core.config import settings
 from app.core.database import Base, engine
@@ -7,8 +8,12 @@ from app.db.seed import seed_data
 from app.dining_table.dining_table_router import router as dining_table_router
 from app.merchant.merchant_router import router as merchant_router
 from app.product.product_router import router as product_router
-from app.order.order_router import router as order_router
+from app.customer_order.customer_order_router import router as customer_order_router
+from app.merchant_order.merchant_order_router import router as merchant_order_router
+from app.withdrawal.withdrawal_router import router as withdrawal_router
+from app.review.review_router import router as review_router
 
+# Model diregistrasi di app/__init__.py saat package load.
 # Buat tabel (jika belum ada) lalu isi data awal.
 Base.metadata.create_all(bind=engine)
 seed_data()
@@ -39,21 +44,38 @@ app.add_middleware(
 app.include_router(product_router)
 app.include_router(merchant_router)
 app.include_router(dining_table_router)
-app.include_router(order_router)
+app.include_router(customer_order_router)
+app.include_router(merchant_order_router)
+app.include_router(withdrawal_router)
+app.include_router(review_router)
 
 
 @app.get("/", tags=["Root"])
 def root():
+    """Landing endpoint: daftar semua endpoint API (di-generate otomatis dari router)."""
+    grouped: dict[str, list[dict]] = {}
+    for route in app.routes:
+        # Lewati route non-API (mis. /openapi.json, /docs) dan root itu sendiri.
+        if not isinstance(route, APIRoute) or route.path == "/":
+            continue
+        tag = (route.tags or ["Lainnya"])[0]
+        for method in sorted(route.methods - {"HEAD", "OPTIONS"}):
+            grouped.setdefault(tag, []).append(
+                {
+                    "method": method,
+                    "path": route.path,
+                    "summary": route.summary or route.name,
+                }
+            )
+    for items in grouped.values():
+        items.sort(key=lambda e: (e["path"], e["method"]))
+
     return {
         "message": f"Selamat datang di {settings.app_name}!",
+        "version": settings.app_version,
         "docs": "/docs",
         "redoc": "/redoc",
-        "endpoints": {
-            "products": "/products",
-            "product_detail": "/products/{id}",
-            "merchants": "/merchants",
-            "merchant_detail": "/merchants/{id}",
-            "dining_tables": "/dining-tables",
-            "dining_table_scan": "/dining-tables/scan?code={code}",
-        },
+        "openapi": "/openapi.json",
+        "total_endpoints": sum(len(v) for v in grouped.values()),
+        "endpoints": grouped,
     }

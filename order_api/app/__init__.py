@@ -10,7 +10,13 @@ Saat package di-load, kita:
 from app.merchant.merchant_model import Merchant  # noqa: F401
 from app.product.product_model import Product  # noqa: F401
 from app.dining_table.dining_table_model import DiningTable  # noqa: F401
-from app.order.order_model import Order, OrderItem, Notification
+from app.customer.customer_model import Customer  # noqa: F401
+from app.customer_order.customer_order_model import CustomerOrder  # noqa: F401
+from app.merchant_order.merchant_order_model import (  # noqa: F401
+    MerchantOrder, OrderItem, Notification,
+)
+from app.withdrawal.withdrawal_model import Withdrawal  # noqa: F401
+from app.review.review_model import Review  # noqa: F401
 
 # (2) Resolve forward reference: ProductDetail.merchant -> MerchantSummary.
 from app.merchant.merchant_schema import MerchantSummary
