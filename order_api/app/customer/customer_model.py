@@ -6,17 +6,15 @@ from app.core.database import Base
 
 
 class Customer(Base):
-    """Pelanggan. Satu pelanggan memiliki banyak customer order (1 struk global per order).
+    """Pelanggan. Satu pelanggan bisa punya banyak CustomerOrder (struk global)."""
 
-    Catatan: sengaja tidak ada router/endpoint khusus customer — entitas ini hanya
-    dipakai sebagai relasi dari CustomerOrder.
-    """
     __tablename__ = "customers"
 
     id         = Column(Integer, primary_key=True, index=True)
     nama       = Column(String(100), nullable=False)
-    email      = Column(String(150), index=True)
-    phone      = Column(String(30))
+    email      = Column(String(150), unique=True, index=True, nullable=True)
+    phone      = Column(String(30), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     orders = relationship("CustomerOrder", back_populates="customer")

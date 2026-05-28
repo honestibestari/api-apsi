@@ -12,6 +12,7 @@ from app.customer_order.customer_order_router import router as customer_order_ro
 from app.merchant_order.merchant_order_router import router as merchant_order_router
 from app.withdrawal.withdrawal_router import router as withdrawal_router
 from app.review.review_router import router as review_router
+from app.customer.customer_router import router as customer_router
 
 # Model diregistrasi di app/__init__.py saat package load.
 # Buat tabel (jika belum ada) lalu isi data awal.
@@ -48,6 +49,7 @@ app.include_router(customer_order_router)
 app.include_router(merchant_order_router)
 app.include_router(withdrawal_router)
 app.include_router(review_router)
+app.include_router(customer_router)
 
 
 @app.get("/", tags=["Root"])
