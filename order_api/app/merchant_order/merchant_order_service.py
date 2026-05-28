@@ -1,36 +1,59 @@
 from typing import List, Optional
 
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
+from app.customer_order.customer_order_model import CustomerOrder
 from app.customer_order.customer_order_service import sync_customer_order_status
 from app.merchant_order.merchant_order_model import (
     MerchantOrder,
     MerchantOrderStatus,
     Notification,
     NotifikasiTipe,
+    OrderItem,
 )
 from app.merchant_order.merchant_order_schema import (
     MerchantOrderStatusUpdate,
     NotificationMarkRead,
 )
 
-
-# Transisi status yang diizinkan (sesuai diagram merchant).
+# Transisi status yang diizinkan
 _ALLOWED_TRANSITIONS = {
-    MerchantOrderStatus.BARU:       {MerchantOrderStatus.TERBUKA, MerchantOrderStatus.DIBATALKAN},
+    MerchantOrderStatus.BARU:       {MerchantOrderStatus.TERBUKA,  MerchantOrderStatus.DIBATALKAN},
     MerchantOrderStatus.TERBUKA:    {MerchantOrderStatus.DIPROSES, MerchantOrderStatus.DIBATALKAN},
-    MerchantOrderStatus.DIPROSES:   {MerchantOrderStatus.SELESAI, MerchantOrderStatus.DIBATALKAN},
+    MerchantOrderStatus.DIPROSES:   {MerchantOrderStatus.SELESAI,  MerchantOrderStatus.DIBATALKAN},
     MerchantOrderStatus.SELESAI:    set(),
     MerchantOrderStatus.DIBATALKAN: set(),
 }
 
 
-def get_merchant_order_or_404(db: Session, order_id: int) -> MerchantOrder:
-    order = db.query(MerchantOrder).filter(MerchantOrder.id == order_id).first()
+# ── Eager load ────────────────────────────────────────────────────────────────
+
+def _load_merchant_order(db: Session, order_id: int) -> MerchantOrder:
+    """Ambil MerchantOrder beserta semua relasi yang dibutuhkan response."""
+    order = (
+        db.query(MerchantOrder)
+        .options(
+            joinedload(MerchantOrder.merchant),
+            joinedload(MerchantOrder.customer_order)
+                .joinedload(CustomerOrder.customer),
+            joinedload(MerchantOrder.customer_order)
+                .joinedload(CustomerOrder.dining_table),
+            joinedload(MerchantOrder.items)
+                .joinedload(OrderItem.product),
+        )
+        .filter(MerchantOrder.id == order_id)
+        .first()
+    )
     if not order:
         raise HTTPException(status_code=404, detail=f"Merchant order {order_id} tidak ditemukan")
     return order
+
+
+# ── Query ─────────────────────────────────────────────────────────────────────
+
+def get_merchant_order_or_404(db: Session, order_id: int) -> MerchantOrder:
+    return _load_merchant_order(db, order_id)
 
 
 def list_merchant_orders(
@@ -40,7 +63,19 @@ def list_merchant_orders(
     offset: int = 0,
     limit: int = 50,
 ) -> List[MerchantOrder]:
-    query = db.query(MerchantOrder).order_by(MerchantOrder.created_at.desc())
+    query = (
+        db.query(MerchantOrder)
+        .options(
+            joinedload(MerchantOrder.merchant),
+            joinedload(MerchantOrder.customer_order)
+                .joinedload(CustomerOrder.customer),
+            joinedload(MerchantOrder.customer_order)
+                .joinedload(CustomerOrder.dining_table),
+            joinedload(MerchantOrder.items)
+                .joinedload(OrderItem.product),
+        )
+        .order_by(MerchantOrder.created_at.desc())
+    )
     if merchant_id is not None:
         query = query.filter(MerchantOrder.merchant_id == merchant_id)
     if status:
@@ -48,22 +83,28 @@ def list_merchant_orders(
     return query.offset(offset).limit(limit).all()
 
 
-def update_status(db: Session, order_id: int, data: MerchantOrderStatusUpdate) -> MerchantOrder:
-    """Ubah status merchant order, lalu sinkronkan status customer order induk.
+# ── Update status ─────────────────────────────────────────────────────────────
 
-    Transisi:
-      baru     → terbuka   (terima)
-      baru     → dibatalkan (tolak)
-      terbuka  → diproses
-      diproses → selesai
-      terbuka/diproses → dibatalkan
-    Jika dibatalkan: stok dikembalikan.
+def update_status(db: Session, order_id: int, data: MerchantOrderStatusUpdate) -> MerchantOrder:
+    """Ubah status MerchantOrder lalu sinkronkan status CustomerOrder induk.
+
+    Transisi yang diizinkan:
+      baru       → terbuka | dibatalkan
+      terbuka    → diproses | dibatalkan
+      diproses   → selesai | dibatalkan
+      selesai    → (final)
+      dibatalkan → (final)
+
+    Jika dibatalkan: stok dikembalikan otomatis.
+    Setiap perubahan: notifikasi baru di inbox merchant.
+    CustomerOrder diperbarui otomatis via sync_customer_order_status().
     """
-    order = get_merchant_order_or_404(db, order_id)
+    order = _load_merchant_order(db, order_id)
     new_status = data.status
 
     if new_status == order.status:
         return order
+
     if new_status not in _ALLOWED_TRANSITIONS[order.status]:
         raise HTTPException(
             status_code=400,
@@ -72,10 +113,14 @@ def update_status(db: Session, order_id: int, data: MerchantOrderStatusUpdate) -
 
     order.status = new_status
 
+    # Kembalikan stok jika dibatalkan
     if new_status == MerchantOrderStatus.DIBATALKAN:
         for item in order.items:
             if item.product:
                 item.product.stok += item.jumlah
+
+    # Buat notifikasi
+    if new_status == MerchantOrderStatus.DIBATALKAN:
         tipe, judul = NotifikasiTipe.ORDER_DIBATALKAN, "Pesanan dibatalkan"
     elif new_status == MerchantOrderStatus.SELESAI:
         tipe, judul = NotifikasiTipe.ORDER_SELESAI, "Pesanan selesai"
@@ -90,13 +135,14 @@ def update_status(db: Session, order_id: int, data: MerchantOrderStatusUpdate) -
         pesan=f"{order.order_code} → {new_status.value}",
     ))
 
-    # Sinkronkan customer order induk (§D).
+    # Sinkronkan status CustomerOrder induk
     if order.customer_order:
         sync_customer_order_status(order.customer_order)
 
     db.commit()
-    db.refresh(order)
-    return order
+
+    # Reload dengan joinedload agar semua relasi terisi di response
+    return _load_merchant_order(db, order_id)
 
 
 # ── Notifikasi ────────────────────────────────────────────────────────────────

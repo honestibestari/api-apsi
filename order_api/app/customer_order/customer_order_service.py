@@ -1,7 +1,7 @@
 from typing import List, Optional
 
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.customer.customer_model import Customer
 from app.customer_order.customer_order_model import CustomerOrder, CustomerOrderStatus
@@ -17,12 +17,39 @@ from app.merchant_order.merchant_order_model import (
 from app.product.product_model import Product
 
 
-# ── Sinkronisasi status (§D di diagram) ────────────────────────────────────────
+# ── Eager load ────────────────────────────────────────────────────────────────
+
+def _load_customer_order(db: Session, order_id: int) -> CustomerOrder:
+    """Ambil CustomerOrder beserta semua relasi (joinedload bertingkat)."""
+    order = (
+        db.query(CustomerOrder)
+        .options(
+            joinedload(CustomerOrder.customer),
+            joinedload(CustomerOrder.dining_table),
+            joinedload(CustomerOrder.merchant_orders)
+                .joinedload(MerchantOrder.merchant),
+            joinedload(CustomerOrder.merchant_orders)
+                .joinedload(MerchantOrder.items)
+                .joinedload(OrderItem.product),
+        )
+        .filter(CustomerOrder.id == order_id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail=f"Customer order {order_id} tidak ditemukan")
+    return order
+
+
+# ── Sinkronisasi status ───────────────────────────────────────────────────────
 
 def derive_customer_status(merchant_orders) -> CustomerOrderStatus:
-    """Turunkan status customer order dari status tiap merchant order.
+    """Turunkan status CustomerOrder dari status tiap MerchantOrder.
 
-    Item/merchant order yang dibatalkan tidak diperhitungkan dalam sinkronisasi.
+    Aturan:
+    - Semua dibatalkan         → CANCELLED
+    - Semua aktif selesai      → WAITING_CONFIRMATION
+    - Ada yang sedang diproses → PROCESS
+    - Sisanya                  → OPEN
     """
     active = [m for m in merchant_orders if m.status != MerchantOrderStatus.DIBATALKAN]
     if not active:
@@ -35,23 +62,20 @@ def derive_customer_status(merchant_orders) -> CustomerOrderStatus:
 
 
 def sync_customer_order_status(customer_order: CustomerOrder) -> None:
-    """Perbarui status customer order berdasarkan merchant order-nya.
+    """Perbarui status CustomerOrder dari kondisi MerchantOrder-nya.
 
-    Tidak mengubah status pra-bayar (VERIFYING) maupun terminal (DONE);
-    caller bertanggung jawab melakukan commit.
+    Tidak mengubah status VERIFYING (belum bayar) dan DONE (sudah selesai).
+    Caller yang bertanggung jawab melakukan commit.
     """
     if customer_order.status in (CustomerOrderStatus.VERIFYING, CustomerOrderStatus.DONE):
         return
     customer_order.status = derive_customer_status(customer_order.merchant_orders)
 
 
-# ── Query ───────────────────────────────────────────────────────────────────────
+# ── Query ─────────────────────────────────────────────────────────────────────
 
 def get_customer_order_or_404(db: Session, order_id: int) -> CustomerOrder:
-    order = db.query(CustomerOrder).filter(CustomerOrder.id == order_id).first()
-    if not order:
-        raise HTTPException(status_code=404, detail=f"Customer order {order_id} tidak ditemukan")
-    return order
+    return _load_customer_order(db, order_id)
 
 
 def list_customer_orders(
@@ -60,7 +84,15 @@ def list_customer_orders(
     offset: int = 0,
     limit: int = 50,
 ) -> List[CustomerOrder]:
-    query = db.query(CustomerOrder).order_by(CustomerOrder.created_at.desc())
+    query = (
+        db.query(CustomerOrder)
+        .options(
+            joinedload(CustomerOrder.customer),
+            joinedload(CustomerOrder.dining_table),
+            joinedload(CustomerOrder.merchant_orders),
+        )
+        .order_by(CustomerOrder.created_at.desc())
+    )
     if status:
         query = query.filter(CustomerOrder.status == status)
     return query.offset(offset).limit(limit).all()
@@ -69,21 +101,36 @@ def list_customer_orders(
 # ── Create ────────────────────────────────────────────────────────────────────
 
 def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrder:
-    """Buat customer order lalu pecah menjadi merchant order per tenant.
+    """Buat CustomerOrder lalu pecah menjadi MerchantOrder per tenant.
 
-    - Pelanggan dibuat baru, atau dipakai ulang bila email cocok.
-    - Item dikelompokkan per merchant (berdasar product.merchant_id).
-    - Stok berkurang & notifikasi ORDER_BARU dikirim ke tiap merchant.
+    Alur:
+    1. Validasi meja (jika dine_in)
+    2. Upsert customer (pakai ulang jika email cocok)
+    3. Buat CustomerOrder (status: verifying)
+    4. Ambil semua product sekaligus (1 query), kelompokkan per merchant_id
+    5. Per merchant: buat MerchantOrder + OrderItem + kurangi stok + notifikasi
+    6. Hitung total_harga, commit, reload dengan joinedload
     """
+
+    # 1. Validasi meja
     table = None
     if data.dining_table_code:
-        table = db.query(DiningTable).filter(DiningTable.code == data.dining_table_code).first()
+        table = (
+            db.query(DiningTable)
+            .filter(DiningTable.code == data.dining_table_code)
+            .first()
+        )
         if not table:
             raise HTTPException(status_code=404, detail="Meja tidak ditemukan")
 
+    # 2. Upsert customer
     customer = None
     if data.customer.email:
-        customer = db.query(Customer).filter(Customer.email == data.customer.email).first()
+        customer = (
+            db.query(Customer)
+            .filter(Customer.email == data.customer.email)
+            .first()
+        )
     if not customer:
         customer = Customer(
             nama=data.customer.nama,
@@ -93,6 +140,7 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
         db.add(customer)
         db.flush()
 
+    # 3. Buat CustomerOrder
     customer_order = CustomerOrder(
         customer_id=customer.id,
         dining_table_id=table.id if table else None,
@@ -102,18 +150,23 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
         status=CustomerOrderStatus.VERIFYING,
     )
     db.add(customer_order)
-    db.flush()  # dapatkan id + order_code
+    db.flush()  # agar order_code ter-generate
 
-    # Kelompokkan item per merchant.
+    # 4. Ambil semua product sekaligus, kelompokkan per merchant
+    product_ids = [i.product_id for i in data.items]
+    products = db.query(Product).filter(Product.id.in_(product_ids)).all()
+    product_map = {p.id: p for p in products}
+
     groups: dict[int, list] = {}
     for item in data.items:
-        product = db.query(Product).filter(Product.id == item.product_id).first()
+        product = product_map.get(item.product_id)
         if not product:
             raise HTTPException(status_code=404, detail=f"Product {item.product_id} tidak ditemukan")
         if product.stok < item.jumlah:
             raise HTTPException(status_code=400, detail=f"Stok '{product.nama}' tidak cukup")
         groups.setdefault(product.merchant_id, []).append((product, item))
 
+    # 5. Buat MerchantOrder per tenant
     total_order = 0.0
     for merchant_id, entries in groups.items():
         merchant_order = MerchantOrder(
@@ -123,13 +176,14 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
             status=MerchantOrderStatus.BARU,
         )
         db.add(merchant_order)
-        db.flush()
+        db.flush()  # agar merchant_order.id tersedia untuk OrderItem
 
         subtotal = 0.0
         for product, item in entries:
             line = product.harga * item.jumlah
             subtotal += line
-            product.stok -= item.jumlah
+            product.stok -= item.jumlah  # kurangi stok
+
             db.add(OrderItem(
                 merchant_order_id=merchant_order.id,
                 product_id=product.id,
@@ -151,31 +205,31 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
             pesan=f"Pesanan {merchant_order.order_code} menunggu konfirmasi.",
         ))
 
+    # 6. Simpan total dan commit
     customer_order.total_harga = total_order
     db.commit()
-    db.refresh(customer_order)
-    return customer_order
+
+    # Reload dengan joinedload agar semua relasi terisi di response
+    return _load_customer_order(db, customer_order.id)
 
 
-# ── Transisi status customer ────────────────────────────────────────────────────
+# ── Transisi status CustomerOrder ─────────────────────────────────────────────
 
 def verify_payment(db: Session, order_id: int) -> CustomerOrder:
     """Pembayaran terverifikasi: VERIFYING → OPEN."""
-    order = get_customer_order_or_404(db, order_id)
+    order = _load_customer_order(db, order_id)
     if order.status != CustomerOrderStatus.VERIFYING:
         raise HTTPException(status_code=400, detail="Order tidak sedang menunggu verifikasi pembayaran")
     order.status = CustomerOrderStatus.OPEN
     db.commit()
-    db.refresh(order)
-    return order
+    return _load_customer_order(db, order_id)
 
 
 def confirm_order(db: Session, order_id: int) -> CustomerOrder:
     """Pelanggan konfirmasi pesanan selesai: WAITING_CONFIRMATION → DONE."""
-    order = get_customer_order_or_404(db, order_id)
+    order = _load_customer_order(db, order_id)
     if order.status != CustomerOrderStatus.WAITING_CONFIRMATION:
         raise HTTPException(status_code=400, detail="Order belum siap dikonfirmasi")
     order.status = CustomerOrderStatus.DONE
     db.commit()
-    db.refresh(order)
-    return order
+    return _load_customer_order(db, order_id)
