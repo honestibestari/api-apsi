@@ -16,6 +16,8 @@ class MerchantStatus(str, enum.Enum):
 class Merchant(Base):
     __tablename__ = "merchants"
 
+    password_hash = Column(String, nullable=False)
+
     id = Column(Integer, primary_key=True, index=True)
     nama = Column(String, nullable=False, index=True)
     deskripsi = Column(String)

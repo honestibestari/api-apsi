@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.product import product_service
 from app.product.product_schema import (ProductCreate, ProductDetail, ProductSummary, ProductUpdate)
+from app.core.auth import get_current_merchant
+from app.merchant.merchant_model import Merchant
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -14,9 +16,10 @@ def list_products(
     limit: int = Query(20, ge=1, le=100, description="Jumlah item per halaman"),
     merchant_id: Optional[int] = Query(None, description="Filter product milik merchant ini"),
     search: Optional[str] = Query(None, description="Cari berdasarkan nama product"),
+    current_merchant: Merchant = Depends(get_current_merchant),
     db: Session = Depends(get_db),
 ):
-    return product_service.get_products(db, offset=offset, limit=limit, merchant_id=merchant_id, search=search)
+    return product_service.get_products(db, merchant_id=current_merchant.id)
 
 
 @router.get("/{product_id}", response_model=ProductDetail, summary="Detail product beserta info merchant")

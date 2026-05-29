@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.merchant_order import merchant_order_service
 from app.merchant_order.merchant_order_model import MerchantOrderStatus
+from app.core.auth import get_current_merchant
+from app.merchant.merchant_model import Merchant
 from app.merchant_order.merchant_order_schema import (
     MerchantOrderOut,
     MerchantOrderStatusUpdate,
@@ -27,10 +29,11 @@ def list_merchant_orders(
     status:      Optional[MerchantOrderStatus] = Query(None, description="baru | terbuka | diproses | selesai | dibatalkan"),
     offset:      int                           = Query(0, ge=0),
     limit:       int                           = Query(50, ge=1, le=200),
+    current_merchant: Merchant = Depends(get_current_merchant),
     db: Session = Depends(get_db),
 ):
     return merchant_order_service.list_merchant_orders(
-        db, merchant_id=merchant_id, status=status, offset=offset, limit=limit
+        db, merchant_id=current_merchant.id  
     )
 
 

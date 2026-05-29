@@ -7,12 +7,10 @@ from app.core.database import Base, SessionLocal, engine
 from app.dining_table.dining_table_model import DiningTable
 from app.merchant.merchant_model import Merchant, MerchantStatus
 from app.product.product_model import Product
+from app.core.auth import hash_password
 
 
 def seed_orders(db):
-    """Tanam beberapa customer order contoh, masing-masing dipecah ke merchant order.
-    Mendemonstrasikan tiap status lifecycle + satu order mixed (ada tenant dibatalkan).
-    """
     from app.customer.customer_model import Customer
     from app.customer_order.customer_order_model import (
         CustomerOrder, CustomerOrderStatus, MetodePembayaran, TipeOrder,
@@ -32,7 +30,6 @@ def seed_orders(db):
         return db.query(Merchant).filter(Merchant.nama == nama).first()
 
     def build_order(code, cust, table, status, mo_specs):
-        """mo_specs: list of (merchant_nama, MerchantOrderStatus, [(product_nama, qty)])."""
         customer = Customer(nama=cust["nama"], email=cust["email"], phone=cust["phone"])
         db.add(customer)
         db.flush()
@@ -113,7 +110,6 @@ def seed_orders(db):
     db.commit()
     print(f"[OK] {len(specs)} customer order ditambahkan")
 
-    # ── Ulasan (rating) ──
     from app.review.review_model import Review
     reviews = [
         ("Seblak Teh Rina", 5, "Pedasnya mantap, porsi banyak!", "Andi Pratama"),
@@ -131,7 +127,6 @@ def seed_orders(db):
         if merchant:
             db.add(Review(merchant_id=merchant.id, rating=rating, komentar=komentar, pelanggan=penulis))
 
-    # ── Penarikan dana (withdrawal) ──
     from datetime import datetime
     from app.withdrawal.withdrawal_model import Withdrawal, WithdrawalStatus
     withdrawals = [
@@ -193,7 +188,10 @@ def seed_data():
 
     print("Menanam data dummy...")
 
-    # Tenant F&B di area Teras LA, selaras dengan konsol admin frontend.
+    # Semua merchant diberi password_hash=hash_password("password123")
+    # sehingga bisa login dengan password: password123
+    DEFAULT_PASSWORD = hash_password("password123")
+
     data = [
         {
             "merchant": Merchant(
@@ -201,6 +199,7 @@ def seed_data():
                 alamat="Blok B-001", owner="Rina Wati", email="rinaseblak@gmail.com",
                 phone="0812-3456-7890", block="B-001", category="Makanan",
                 status=MerchantStatus.ACTIVE,
+                password_hash=DEFAULT_PASSWORD,  # ← password: password123
             ),
             "products": [
                 Product(nama="Seblak Komplit", harga=22000, stok=50, deskripsi="Seblak dengan topping lengkap"),
@@ -214,6 +213,7 @@ def seed_data():
                 alamat="Blok E-012", owner="Marina Sutopo", email="marina.thai@gmail.com",
                 phone="0813-2222-4567", block="E-012", category="Minuman",
                 status=MerchantStatus.ACTIVE,
+                password_hash=DEFAULT_PASSWORD,  # ← password: password123
             ),
             "products": [
                 Product(nama="Thai Tea Original", harga=12000, stok=80, deskripsi="Thai tea klasik"),
@@ -227,6 +227,7 @@ def seed_data():
                 alamat="Blok C-005", owner="Asep Solihin", email="asep.siomay@gmail.com",
                 phone="0857-1111-2233", block="C-005", category="Camilan",
                 status=MerchantStatus.ACTIVE,
+                password_hash=DEFAULT_PASSWORD,
             ),
             "products": [
                 Product(nama="Siomay Bandung", harga=12000, stok=40, deskripsi="Siomay komplit bumbu kacang"),
@@ -239,6 +240,7 @@ def seed_data():
                 alamat="Blok A-003", owner="Eko Wahyudi", email="ekokantin@gmail.com",
                 phone="0812-9876-5432", block="A-003", category="Makanan",
                 status=MerchantStatus.ACTIVE,
+                password_hash=DEFAULT_PASSWORD,
             ),
             "products": [
                 Product(nama="Nasi Goreng Spesial", harga=20000, stok=40, deskripsi="Nasi goreng dengan telur & ayam"),
@@ -251,6 +253,7 @@ def seed_data():
                 alamat="Blok D-007", owner="Ami Suryani", email="amigorengan@gmail.com",
                 phone="0821-4567-8901", block="D-007", category="Camilan",
                 status=MerchantStatus.ACTIVE,
+                password_hash=DEFAULT_PASSWORD,
             ),
             "products": [
                 Product(nama="Bakwan Sayur", harga=2000, stok=200, deskripsi="Bakwan sayur renyah"),
@@ -264,6 +267,7 @@ def seed_data():
                 alamat="Blok E-002", owner="Udin Hidayat", email="udinwarung@gmail.com",
                 phone="0856-7890-1234", block="E-002", category="Makanan",
                 status=MerchantStatus.SUSPENDED,
+                password_hash=DEFAULT_PASSWORD,
             ),
             "products": [
                 Product(nama="Nasi Goreng Pak Udin", harga=18000, stok=30, deskripsi="Nasi goreng spesial racikan Pak Udin"),
@@ -276,6 +280,7 @@ def seed_data():
                 alamat="Blok C-010", owner="Joko Susilo", email="jokomie@gmail.com",
                 phone="0813-5678-9012", block="C-010", category="Makanan",
                 status=MerchantStatus.ACTIVE,
+                password_hash=DEFAULT_PASSWORD,
             ),
             "products": [
                 Product(nama="Mie Ayam Komplit", harga=15000, stok=50, deskripsi="Mie ayam dengan topping lengkap"),
@@ -288,6 +293,7 @@ def seed_data():
                 alamat="Blok A-008", owner="Sari Indriani", email="sariesteh@gmail.com",
                 phone="0857-2345-6789", block="A-008", category="Minuman",
                 status=MerchantStatus.ACTIVE,
+                password_hash=DEFAULT_PASSWORD,
             ),
             "products": [
                 Product(nama="Es Lemon Tea Jumbo", harga=8000, stok=100, deskripsi="Lemon tea ukuran jumbo"),
@@ -300,6 +306,7 @@ def seed_data():
                 alamat="Blok B-004", owner="Mulyono Suryadi", email="kumisbakso@gmail.com",
                 phone="0812-3344-5566", block="B-004", category="Makanan",
                 status=MerchantStatus.PENDING,
+                password_hash=DEFAULT_PASSWORD,
             ),
             "products": [
                 Product(nama="Bakso Urat", harga=15000, stok=40, deskripsi="Bakso urat sapi"),
@@ -312,6 +319,7 @@ def seed_data():
                 alamat="Blok D-011", owner="Senja Pramudya", email="senjaroti@gmail.com",
                 phone="0821-7788-9900", block="D-011", category="Camilan",
                 status=MerchantStatus.PENDING,
+                password_hash=DEFAULT_PASSWORD,
             ),
             "products": [
                 Product(nama="Roti Bakar Coklat", harga=15000, stok=40, deskripsi="Roti bakar coklat keju"),
@@ -324,6 +332,7 @@ def seed_data():
                 alamat="Blok E-014", owner="Andika Wijaya", email="andikakopi@gmail.com",
                 phone="0856-1122-3344", block="E-014", category="Minuman",
                 status=MerchantStatus.PENDING,
+                password_hash=DEFAULT_PASSWORD,
             ),
             "products": [
                 Product(nama="Kopi Susu Gula Aren", harga=18000, stok=80, deskripsi="Kopi susu gula aren"),
@@ -335,7 +344,7 @@ def seed_data():
     total_product = 0
     for entry in data:
         merchant = entry["merchant"]
-        merchant.products = entry["products"]  # relasi mengisi merchant_id otomatis
+        merchant.products = entry["products"]
         db.add(merchant)
         total_product += len(entry["products"])
 
