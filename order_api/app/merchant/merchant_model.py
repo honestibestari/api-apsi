@@ -1,8 +1,9 @@
 import enum
 
-from sqlalchemy import Column, DateTime, Enum, Integer, String
+from sqlalchemy import Column, DateTime, Enum, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from sqlalchemy import ForeignKey
 
 from app.core.database import Base
 
@@ -19,6 +20,12 @@ class Merchant(Base):
     password_hash = Column(String, nullable=False)
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer, 
+        ForeignKey("users.id"),
+        unique=True,
+        nullable=False  
+    )
     nama = Column(String, nullable=False, index=True)
     deskripsi = Column(String)
     alamat = Column(String)
@@ -34,6 +41,7 @@ class Merchant(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relasi.
+    user            = relationship("User", back_populates="merchant")
     products        = relationship("Product", back_populates="merchant", cascade="all, delete-orphan")
     merchant_orders = relationship("MerchantOrder", back_populates="merchant")
     withdrawals     = relationship("Withdrawal", back_populates="merchant", cascade="all, delete-orphan")

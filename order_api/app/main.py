@@ -14,6 +14,8 @@ from app.withdrawal.withdrawal_router import router as withdrawal_router
 from app.review.review_router import router as review_router
 from app.customer.customer_router import router as customer_router
 from app.auth.auth_router import router as auth_router
+from app.user.user_model import User
+from app.admin.admin_router import router as admin_router
 
 # Model diregistrasi di app/__init__.py saat package load.
 # Buat tabel (jika belum ada) lalu isi data awal.
@@ -52,7 +54,7 @@ app.include_router(withdrawal_router)
 app.include_router(review_router)
 app.include_router(customer_router)
 app.include_router(auth_router)
-
+app.include_router(admin_router)
 
 
 @app.get("/", tags=["Root"])

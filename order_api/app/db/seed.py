@@ -1,11 +1,9 @@
-"""Seeder data awal (merchant & product dummy).
-
-Dipanggil sekali saat startup. Jika data sudah ada, proses dilewati.
-Bisa juga dijalankan manual: `python -m app.db.seed`
-"""
 from app.core.database import Base, SessionLocal, engine
 from app.dining_table.dining_table_model import DiningTable
 from app.merchant.merchant_model import Merchant, MerchantStatus
+from app.user.user_model import User
+from app.user.user_model import UserRole
+from app.admin.admin_model import Admin
 from app.product.product_model import Product
 from app.core.auth import hash_password
 
@@ -158,6 +156,7 @@ def seed_orders(db):
 def seed_data():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
+    seed_admin(db) 
 
     merchants_exist = db.query(Merchant).count() > 0
     dining_tables_exist = db.query(DiningTable).count() > 0
@@ -344,8 +343,22 @@ def seed_data():
     total_product = 0
     for entry in data:
         merchant = entry["merchant"]
+        user = User(
+            username=merchant.email.split("@")[0],
+            email=merchant.email,
+            password_hash=merchant.password_hash,
+            role=UserRole.MERCHANT
+        )
+
+        db.add(user)
+        db.flush()
+
+        merchant.user_id = user.id
+
         merchant.products = entry["products"]
+
         db.add(merchant)
+
         total_product += len(entry["products"])
 
     db.commit()
@@ -356,6 +369,41 @@ def seed_data():
     print("Seeding selesai!")
     db.close()
 
+
+def seed_admin(db):
+
+    admin_user = (
+        db.query(User)
+        .filter(User.role == UserRole.ADMIN)
+        .first()
+    )
+
+    if admin_user:
+        print("[OK] Admin sudah ada, skip.")
+        return
+
+    user = User(
+        username="admin",
+        email="admin@orderapi.com",
+        password_hash=hash_password("admin123"),
+        role=UserRole.ADMIN
+    )
+
+    db.add(user)
+    db.flush()
+
+    admin = Admin(
+        user_id=user.id,
+        nama="Super Admin"
+    )
+
+    db.add(admin)
+    db.commit()
+
+    print("[OK] Admin ditambahkan")
+    print("Email    : admin@orderapi.com")
+    print("Password : admin123")
+ 
 
 if __name__ == "__main__":
     seed_data()

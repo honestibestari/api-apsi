@@ -124,21 +124,46 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
             raise HTTPException(status_code=404, detail="Meja tidak ditemukan")
 
     # 2. Upsert customer
-    customer = None
-    if data.customer.email:
-        customer = (
-            db.query(Customer)
-            .filter(Customer.email == data.customer.email)
-            .first()
-        )
-    if not customer:
-        customer = Customer(
-            nama=data.customer.nama,
-            email=data.customer.email,
-            phone=data.customer.phone,
-        )
-        db.add(customer)
-        db.flush()
+    def _upsert_customer(db, data_customer):
+ 
+        customer = None
+    
+        # Cari by email
+        if data_customer.email:
+            customer = (
+                db.query(Customer)
+                .filter(Customer.email == data_customer.email)
+                .first()
+            )
+    
+        # Kalau tidak ketemu by email, cari by phone
+        if not customer and data_customer.phone:
+            customer = (
+                db.query(Customer)
+                .filter(Customer.phone == data_customer.phone)
+                .first()
+            )
+    
+        if customer:
+            # Customer lama ditemukan — update data jika ada perubahan
+            if data_customer.nama and customer.nama != data_customer.nama:
+                customer.nama = data_customer.nama
+            if data_customer.phone and customer.phone != data_customer.phone:
+                customer.phone = data_customer.phone
+            if data_customer.email and customer.email != data_customer.email:
+                customer.email = data_customer.email
+            db.flush()
+        else:
+            # Customer baru
+            customer = Customer(
+                nama  = data_customer.nama,
+                email = data_customer.email,
+                phone = data_customer.phone,
+            )
+            db.add(customer)
+            db.flush()
+    
+        return customer
 
     # 3. Buat CustomerOrder
     customer_order = CustomerOrder(

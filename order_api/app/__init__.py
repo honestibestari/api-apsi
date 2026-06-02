@@ -17,6 +17,7 @@ from app.merchant_order.merchant_order_model import (  # noqa: F401
 )
 from app.withdrawal.withdrawal_model import Withdrawal  # noqa: F401
 from app.review.review_model import Review  # noqa: F401
+from app.admin.admin_model import Admin
 
 # (2) Resolve forward reference: ProductDetail.merchant -> MerchantSummary.
 from app.merchant.merchant_schema import MerchantSummary
