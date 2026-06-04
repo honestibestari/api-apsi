@@ -40,17 +40,59 @@ def _load_customer_order(db: Session, order_id: int) -> CustomerOrder:
     return order
 
 
+# ── Upsert customer — di LUAR create_customer_order ──────────────────────────
+
+def _upsert_customer(db: Session, data_customer) -> Customer:
+    """Ambil customer lama atau buat baru.
+
+    Cari by email dulu, kalau tidak ketemu cari by phone.
+    Kalau ketemu, update data yang berubah.
+    Kalau tidak ketemu sama sekali, buat baru.
+    """
+    customer = None
+
+    # Cari by email
+    if data_customer.email:
+        customer = (
+            db.query(Customer)
+            .filter(Customer.email == data_customer.email)
+            .first()
+        )
+
+    # Kalau tidak ketemu by email, cari by phone
+    if not customer and data_customer.phone:
+        customer = (
+            db.query(Customer)
+            .filter(Customer.phone == data_customer.phone)
+            .first()
+        )
+
+    if customer:
+        # Customer lama — update data jika ada perubahan
+        if data_customer.nama and customer.nama != data_customer.nama:
+            customer.nama = data_customer.nama
+        if data_customer.phone and customer.phone != data_customer.phone:
+            customer.phone = data_customer.phone
+        if data_customer.email and customer.email != data_customer.email:
+            customer.email = data_customer.email
+        db.flush()
+    else:
+        # Customer baru
+        customer = Customer(
+            nama  = data_customer.nama,
+            email = data_customer.email,
+            phone = data_customer.phone,
+        )
+        db.add(customer)
+        db.flush()
+
+    return customer
+
+
 # ── Sinkronisasi status ───────────────────────────────────────────────────────
 
 def derive_customer_status(merchant_orders) -> CustomerOrderStatus:
-    """Turunkan status CustomerOrder dari status tiap MerchantOrder.
-
-    Aturan:
-    - Semua dibatalkan         → CANCELLED
-    - Semua aktif selesai      → WAITING_CONFIRMATION
-    - Ada yang sedang diproses → PROCESS
-    - Sisanya                  → OPEN
-    """
+    """Turunkan status CustomerOrder dari status tiap MerchantOrder."""
     active = [m for m in merchant_orders if m.status != MerchantOrderStatus.DIBATALKAN]
     if not active:
         return CustomerOrderStatus.CANCELLED
@@ -62,11 +104,7 @@ def derive_customer_status(merchant_orders) -> CustomerOrderStatus:
 
 
 def sync_customer_order_status(customer_order: CustomerOrder) -> None:
-    """Perbarui status CustomerOrder dari kondisi MerchantOrder-nya.
-
-    Tidak mengubah status VERIFYING (belum bayar) dan DONE (sudah selesai).
-    Caller yang bertanggung jawab melakukan commit.
-    """
+    """Perbarui status CustomerOrder dari kondisi MerchantOrder-nya."""
     if customer_order.status in (CustomerOrderStatus.VERIFYING, CustomerOrderStatus.DONE):
         return
     customer_order.status = derive_customer_status(customer_order.merchant_orders)
@@ -104,15 +142,18 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
     """Buat CustomerOrder lalu pecah menjadi MerchantOrder per tenant.
 
     Alur:
-    1. Validasi meja (jika dine_in)
-    2. Upsert customer (pakai ulang jika email cocok)
+    1. Upsert customer (pakai ulang jika email/phone cocok)
+    2. Validasi meja (jika dine_in)
     3. Buat CustomerOrder (status: verifying)
     4. Ambil semua product sekaligus (1 query), kelompokkan per merchant_id
     5. Per merchant: buat MerchantOrder + OrderItem + kurangi stok + notifikasi
     6. Hitung total_harga, commit, reload dengan joinedload
     """
 
-    # 1. Validasi meja
+    # 1. Upsert customer
+    customer = _upsert_customer(db, data.customer)
+
+    # 2. Validasi meja
     table = None
     if data.dining_table_code:
         table = (
@@ -123,66 +164,24 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
         if not table:
             raise HTTPException(status_code=404, detail="Meja tidak ditemukan")
 
-    # 2. Upsert customer
-    def _upsert_customer(db, data_customer):
- 
-        customer = None
-    
-        # Cari by email
-        if data_customer.email:
-            customer = (
-                db.query(Customer)
-                .filter(Customer.email == data_customer.email)
-                .first()
-            )
-    
-        # Kalau tidak ketemu by email, cari by phone
-        if not customer and data_customer.phone:
-            customer = (
-                db.query(Customer)
-                .filter(Customer.phone == data_customer.phone)
-                .first()
-            )
-    
-        if customer:
-            # Customer lama ditemukan — update data jika ada perubahan
-            if data_customer.nama and customer.nama != data_customer.nama:
-                customer.nama = data_customer.nama
-            if data_customer.phone and customer.phone != data_customer.phone:
-                customer.phone = data_customer.phone
-            if data_customer.email and customer.email != data_customer.email:
-                customer.email = data_customer.email
-            db.flush()
-        else:
-            # Customer baru
-            customer = Customer(
-                nama  = data_customer.nama,
-                email = data_customer.email,
-                phone = data_customer.phone,
-            )
-            db.add(customer)
-            db.flush()
-    
-        return customer
-
     # 3. Buat CustomerOrder
     customer_order = CustomerOrder(
-        customer_id=customer.id,
-        dining_table_id=table.id if table else None,
-        tipe_order=data.tipe_order,
-        metode_pembayaran=data.metode_pembayaran,
-        catatan=data.catatan,
-        status=CustomerOrderStatus.VERIFYING,
+        customer_id       = customer.id,
+        dining_table_id   = table.id if table else None,
+        tipe_order        = data.tipe_order,
+        metode_pembayaran = data.metode_pembayaran,
+        catatan           = data.catatan,
+        status            = CustomerOrderStatus.VERIFYING,
     )
     db.add(customer_order)
     db.flush()  # agar order_code ter-generate
 
     # 4. Ambil semua product sekaligus, kelompokkan per merchant
     product_ids = [i.product_id for i in data.items]
-    products = db.query(Product).filter(Product.id.in_(product_ids)).all()
+    products    = db.query(Product).filter(Product.id.in_(product_ids)).all()
     product_map = {p.id: p for p in products}
 
-    groups: dict[int, list] = {}
+    groups: dict = {}
     for item in data.items:
         product = product_map.get(item.product_id)
         if not product:
@@ -195,46 +194,45 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
     total_order = 0.0
     for merchant_id, entries in groups.items():
         merchant_order = MerchantOrder(
-            order_code=f"{customer_order.order_code}-T{merchant_id}",
-            customer_order_id=customer_order.id,
-            merchant_id=merchant_id,
-            status=MerchantOrderStatus.BARU,
+            order_code        = f"{customer_order.order_code}-T{merchant_id}",
+            customer_order_id = customer_order.id,
+            merchant_id       = merchant_id,
+            status            = MerchantOrderStatus.BARU,
         )
         db.add(merchant_order)
-        db.flush()  # agar merchant_order.id tersedia untuk OrderItem
+        db.flush()
 
         subtotal = 0.0
         for product, item in entries:
-            line = product.harga * item.jumlah
+            line      = product.harga * item.jumlah
             subtotal += line
-            product.stok -= item.jumlah  # kurangi stok
+            product.stok -= item.jumlah
 
             db.add(OrderItem(
-                merchant_order_id=merchant_order.id,
-                product_id=product.id,
-                jumlah=item.jumlah,
-                harga_satuan=product.harga,
-                subtotal=line,
-                varian=item.varian,
+                merchant_order_id = merchant_order.id,
+                product_id        = product.id,
+                jumlah            = item.jumlah,
+                harga_satuan      = product.harga,
+                subtotal          = line,
+                varian            = item.varian,
             ))
 
-        merchant_order.subtotal = subtotal
+        merchant_order.subtotal    = subtotal
         merchant_order.total_harga = subtotal + merchant_order.biaya_penanganan
-        total_order += merchant_order.total_harga
+        total_order               += merchant_order.total_harga
 
         db.add(Notification(
-            merchant_id=merchant_id,
-            merchant_order_id=merchant_order.id,
-            tipe=NotifikasiTipe.ORDER_BARU,
-            judul="Pesanan baru masuk",
-            pesan=f"Pesanan {merchant_order.order_code} menunggu konfirmasi.",
+            merchant_id       = merchant_id,
+            merchant_order_id = merchant_order.id,
+            tipe              = NotifikasiTipe.ORDER_BARU,
+            judul             = "Pesanan baru masuk",
+            pesan             = f"Pesanan {merchant_order.order_code} menunggu konfirmasi.",
         ))
 
     # 6. Simpan total dan commit
     customer_order.total_harga = total_order
     db.commit()
 
-    # Reload dengan joinedload agar semua relasi terisi di response
     return _load_customer_order(db, customer_order.id)
 
 

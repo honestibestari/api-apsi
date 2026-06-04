@@ -39,24 +39,36 @@ class CustomerOrder(Base):
     __tablename__ = "customer_orders"
 
     id                = Column(Integer, primary_key=True, index=True)
-    order_code        = Column(String(20), unique=True, index=True, default=_generate_order_code, nullable=False)
+    order_code        = Column(String(20), unique=True, index=True,
+                               default=_generate_order_code, nullable=False)
     customer_id       = Column(Integer, ForeignKey("customers.id"), nullable=False, index=True)
     dining_table_id   = Column(Integer, ForeignKey("dining_tables.id"), nullable=True)
     tipe_order        = Column(Enum(TipeOrder), nullable=False, default=TipeOrder.DINE_IN)
-    status            = Column(Enum(CustomerOrderStatus), nullable=False, default=CustomerOrderStatus.VERIFYING, index=True)
-    metode_pembayaran = Column(Enum(MetodePembayaran), nullable=False, default=MetodePembayaran.QRIS)
+    status            = Column(Enum(CustomerOrderStatus), nullable=False,
+                               default=CustomerOrderStatus.VERIFYING, index=True)
+    metode_pembayaran = Column(Enum(MetodePembayaran), nullable=False,
+                               default=MetodePembayaran.QRIS)
     catatan           = Column(Text, nullable=True)
     total_harga       = Column(Float, nullable=False, default=0.0)
     created_at        = Column(DateTime(timezone=True), server_default=func.now())
     updated_at        = Column(DateTime(timezone=True), onupdate=func.now())
 
+    # Relasi yang sudah ada
     customer        = relationship("Customer", back_populates="orders")
     dining_table    = relationship("DiningTable")
-    merchant_orders = relationship(
-        "MerchantOrder", back_populates="customer_order", cascade="all, delete-orphan"
-    )
+    merchant_orders = relationship("MerchantOrder", back_populates="customer_order",
+                                   cascade="all, delete-orphan")
 
-    # ── Field turunan untuk response (dibaca Pydantic via from_attributes) ──
+    # ← TAMBAH: relasi ke Payment (PESANAN → PEMBAYARAN 1:N)
+    payments = relationship("Payment", back_populates="pesanan",
+                            cascade="all, delete-orphan")
+
+    # ← TAMBAH: relasi ke Refund (PESANAN → REFUND 1:N)
+    refunds  = relationship("Refund", back_populates="pesanan",
+                            cascade="all, delete-orphan")
+
+    # ── Property turunan ─────────────────────────────────────────────────────
+
     @property
     def no_meja(self):
         return self.dining_table.label if self.dining_table else None

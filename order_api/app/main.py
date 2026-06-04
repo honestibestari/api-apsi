@@ -16,6 +16,13 @@ from app.customer.customer_router import router as customer_router
 from app.auth.auth_router import router as auth_router
 from app.user.user_model import User
 from app.admin.admin_router import router as admin_router
+from app.category.category_router           import router as category_router
+from app.payment.payment_router             import router as payment_router
+from app.payment_method.payment_method_router import router as payment_method_router
+from app.refund.refund_router               import router as refund_router
+from app.tenant_balance.tenant_balance_router import router as tenant_balance_router
+from app.tenant_settings.tenant_settings_router import router as tenant_settings_router
+from app.user_notification.notification_user_router import router as notification_user_router
 
 # Model diregistrasi di app/__init__.py saat package load.
 # Buat tabel (jika belum ada) lalu isi data awal.
@@ -55,6 +62,13 @@ app.include_router(review_router)
 app.include_router(customer_router)
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(category_router)
+app.include_router(payment_router)
+app.include_router(payment_method_router)
+app.include_router(refund_router)
+app.include_router(tenant_balance_router)
+app.include_router(tenant_settings_router)
+app.include_router(notification_user_router)
 
 
 @app.get("/", tags=["Root"])

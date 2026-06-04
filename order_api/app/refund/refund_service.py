@@ -1,0 +1,52 @@
+from typing import List, Optional
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+
+from app.refund.refund_model import Refund, StatusRefund
+from app.refund.refund_schema import RefundCreate
+
+
+def get_refund_or_404(db: Session, refund_id: int) -> Refund:
+    r = db.query(Refund).filter(Refund.id == refund_id).first()
+    if not r:
+        raise HTTPException(404, "Refund tidak ditemukan")
+    return r
+
+
+def list_refunds(db: Session, id_pesanan: Optional[int] = None) -> List[Refund]:
+    query = db.query(Refund).order_by(Refund.timestamp.desc())
+    if id_pesanan:
+        query = query.filter(Refund.id_pesanan == id_pesanan)
+    return query.all()
+
+
+def create_refund(db: Session, data: RefundCreate) -> Refund:
+    # Cek apakah sudah ada refund pending/disetujui untuk pesanan ini
+    existing = db.query(Refund).filter(
+        Refund.id_pesanan == data.id_pesanan,
+        Refund.status.in_([StatusRefund.PENDING, StatusRefund.DISETUJUI])
+    ).first()
+    if existing:
+        raise HTTPException(400, "Refund untuk pesanan ini sudah diajukan")
+
+    refund = Refund(
+        id_pesanan    = data.id_pesanan,
+        nominal       = data.nominal,
+        metode_refund = data.metode_refund,
+        nomor_tujuan  = data.nomor_tujuan,
+        status        = StatusRefund.PENDING,
+    )
+    db.add(refund)
+    db.commit()
+    db.refresh(refund)
+    return refund
+
+
+def update_refund_status(db: Session, refund_id: int, status: StatusRefund) -> Refund:
+    refund = get_refund_or_404(db, refund_id)
+    if refund.status != StatusRefund.PENDING:
+        raise HTTPException(400, f"Refund sudah berstatus '{refund.status}', tidak bisa diubah")
+    refund.status = status
+    db.commit()
+    db.refresh(refund)
+    return refund

@@ -7,17 +7,23 @@ Saat package di-load, kita:
      yang saling rujuk.
 """
 # (1) Registrasi model — sengaja di-import meski tidak dipakai langsung.
-from app.merchant.merchant_model import Merchant  # noqa: F401
-from app.product.product_model import Product  # noqa: F401
-from app.dining_table.dining_table_model import DiningTable  # noqa: F401
-from app.customer.customer_model import Customer  # noqa: F401
-from app.customer_order.customer_order_model import CustomerOrder  # noqa: F401
-from app.merchant_order.merchant_order_model import (  # noqa: F401
-    MerchantOrder, OrderItem, Notification,
-)
-from app.withdrawal.withdrawal_model import Withdrawal  # noqa: F401
-from app.review.review_model import Review  # noqa: F401
+from app.user.user_model import User
+from app.merchant.merchant_model import Merchant  
+from app.product.product_model import Product  
+from app.dining_table.dining_table_model import DiningTable  
+from app.customer.customer_model import Customer 
+from app.customer_order.customer_order_model import CustomerOrder 
+from app.merchant_order.merchant_order_model import (MerchantOrder, OrderItem, Notification)
+from app.withdrawal.withdrawal_model import Withdrawal  
+from app.review.review_model import Review  
 from app.admin.admin_model import Admin
+from app.category.category_model import Category                             
+from app.payment_method.payment_method_model import PaymentMethod             
+from app.payment.payment_model import Payment                                
+from app.refund.refund_model import Refund                                   
+from app.tenant_balance.tenant_balance_model import TenantBalance            
+from app.tenant_settings.tenant_model_settings import TenantSettings         
+from app.user_notification.notification_user_model import NotificationUser   
 
 # (2) Resolve forward reference: ProductDetail.merchant -> MerchantSummary.
 from app.merchant.merchant_schema import MerchantSummary
