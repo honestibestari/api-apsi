@@ -128,7 +128,7 @@ def list_withdrawals(
 ):
     return (
         db.query(Withdrawal)
-        .order_by(Withdrawal.created_at.desc())
+        .order_by(Withdrawal.requested_at.desc())
         .offset(offset).limit(limit).all()
     )
 

@@ -24,13 +24,6 @@ def detail_merchant(merchant_id: int, db: Session = Depends(get_db)):
     return merchant_service.get_merchant_or_404(db, merchant_id)
  
  
- # create
-@router.post("/", response_model=MerchantDetail, status_code=status.HTTP_201_CREATED, summary="Buat merchant baru")
-def create_merchant(data: MerchantCreate, db: Session = Depends(get_db)):
-    """Buat merchant baru."""
-    return merchant_service.create_merchant(db, data)
- 
- 
  # update
 @router.put("/{merchant_id}", response_model=MerchantDetail, summary="Update merchant (partial update)")
 def update_merchant(merchant_id: int, data: MerchantUpdate, db: Session = Depends(get_db)):

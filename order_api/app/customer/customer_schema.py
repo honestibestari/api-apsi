@@ -1,16 +1,13 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
+from pydantic import BaseModel, ConfigDict, field_validator
 
-from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
-
-
-# ── Input ─────────────────────────────────────────────────────────────────────
 
 class CustomerCreate(BaseModel):
-    """Body POST /customers — buat customer baru."""
     nama:  str
-    email: Optional[EmailStr] = None
-    phone: Optional[str]      = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    no_wa: Optional[str] = None
 
     @field_validator("nama")
     @classmethod
@@ -22,42 +19,28 @@ class CustomerCreate(BaseModel):
 
 
 class CustomerUpdate(BaseModel):
-    """Body PUT /customers/{id} — partial update, semua field opsional."""
-    nama:  Optional[str]      = None
-    email: Optional[EmailStr] = None
-    phone: Optional[str]      = None
+    nama:        Optional[str] = None
+    email:       Optional[str] = None
+    phone:       Optional[str] = None
+    no_wa:       Optional[str] = None
+    minta_struk: Optional[bool] = None
 
-    @field_validator("nama")
-    @classmethod
-    def nama_tidak_kosong(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None:
-            v = v.strip()
-            if not v:
-                raise ValueError("Nama tidak boleh kosong")
-        return v
-
-
-# ── Output ────────────────────────────────────────────────────────────────────
 
 class CustomerOut(BaseModel):
-    """Response detail customer — dipakai GET /customers/{id}."""
-    id:         int
-    nama:       str
-    email:      Optional[str]
-    phone:      Optional[str]
-    created_at: datetime
-    updated_at: Optional[datetime]
-
+    id:          int
+    nama:        str
+    email:       Optional[str] = None
+    phone:       Optional[str] = None
+    no_wa:       Optional[str] = None
+    minta_struk: bool
+    created_at:  datetime
+    updated_at:  Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 
 class CustomerSummary(BaseModel):
-    """Ringkasan customer — dipakai di list GET /customers."""
-    id:          int
-    nama:        str
-    email:       Optional[str]
-    phone:       Optional[str]
-    total_orders: int = 0       # jumlah CustomerOrder milik customer ini
-    created_at:  datetime
-
+    id:    int
+    nama:  str
+    email: Optional[str] = None
+    phone: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)

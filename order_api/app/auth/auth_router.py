@@ -89,63 +89,49 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
  
 @router.post("/register", status_code=201)
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
-    """
-    Daftarkan merchant baru. Langsung aktif tanpa persetujuan admin.
- 
-    Body:
-    {
-        "nama": "Warung Baru",
-        "identifier": "warungbaru@gmail.com",
-        "password": "password123",
-        "owner": "Nama Pemilik",
-        "alamat": "Blok A-001",
-        "block": "A-001",
-        "category": "Makanan",
-        "deskripsi": "Warung masakan rumahan"
-    }
-    """
     is_email = "@" in data.identifier
- 
-    # Cek duplikat di tabel User
+
+    # Cek duplikat
     existing_user = db.query(User).filter(User.email == data.identifier).first()
     if existing_user:
         raise HTTPException(status_code=409, detail="Email sudah terdaftar")
- 
-    # Cek duplikat phone di tabel Merchant
+
     if not is_email:
         existing_phone = db.query(Merchant).filter(Merchant.phone == data.identifier).first()
         if existing_phone:
             raise HTTPException(status_code=409, detail="Nomor HP sudah terdaftar")
- 
-    # Buat User dulu
+
+    # 1. Buat User dulu
     username = data.identifier.split("@")[0] if is_email else data.identifier.replace("-", "")
+    hashed   = hash_password(data.password)
+
     user = User(
         username      = username,
         email         = data.identifier if is_email else f"{username}@merchant.local",
-        password_hash = hash_password(data.password),
+        password_hash = hashed,
         role          = UserRole.MERCHANT,
     )
     db.add(user)
-    db.flush()
- 
-    # Buat Merchant terhubung ke User
+    db.flush()  # ← wajib ada agar user.id tersedia sebelum buat Merchant
+
+    # 2. Buat Merchant pakai user.id
     merchant = Merchant(
-        user_id   = user.id,
-        nama      = data.nama,
-        email     = data.identifier if is_email else None,
-        phone     = data.identifier if not is_email else None,
-        owner     = data.owner,
-        alamat    = data.alamat,
-        block     = data.block,
-        category  = data.category,
-        deskripsi = data.deskripsi,
-        password_hash = user.password_hash,
-        status    = MerchantStatus.ACTIVE,
+        user_id       = user.id,           # ← dari user yang baru dibuat
+        password_hash = hashed,            # ← sama dengan user
+        nama          = data.nama,
+        email         = data.identifier if is_email else None,
+        phone         = data.identifier if not is_email else None,
+        owner         = data.owner,
+        alamat        = data.alamat,
+        block         = data.block,
+        category      = data.category,
+        deskripsi     = data.deskripsi,
+        status        = MerchantStatus.ACTIVE,
     )
     db.add(merchant)
     db.commit()
     db.refresh(merchant)
- 
+
     return {
         "message":     "Merchant berhasil didaftarkan",
         "user_id":     user.id,
