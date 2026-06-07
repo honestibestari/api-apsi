@@ -5,12 +5,11 @@ pydantic==2.9.2
 pydantic-settings==2.5.2
 
 # Database driver (PostgreSQL / Neon)
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.10
 
 # Auth: JWT + password hashing
 python-jose[cryptography]==3.5.0
 passlib==1.7.4
 bcrypt==4.0.1
-python-jose[cryptography]==3.5.0
-passlib==1.7.4
-bcrypt==4.0.1
+# CORS middleware
+fastapi-cors==0.1.0
