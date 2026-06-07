@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # ─── Database ────────────────────────────────────────
     # Default: SQLite lokal di folder order_api.
-    database_url: str = "sqlite:///./store.db"
+    database_url: str
 
     # ─── Auth / JWT ──────────────────────────────────────
     # WAJIB di-set lewat env var di production. Default hanya untuk dev lokal.
