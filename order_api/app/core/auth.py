@@ -6,12 +6,13 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
- 
+
+from app.core.config import settings
 from app.core.database import get_db
- 
-SECRET_KEY           = "hjswbvgfjewht48whsdkvgds"
-ALGORITHM            = "HS256"
-TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 hari
+
+SECRET_KEY           = settings.secret_key
+ALGORITHM            = settings.algorithm
+TOKEN_EXPIRE_MINUTES = settings.token_expire_minutes
  
 pwd_context   = CryptContext(schemes=["bcrypt"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)

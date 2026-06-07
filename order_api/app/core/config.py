@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     # Default: SQLite lokal di folder order_api.
     database_url: str = "sqlite:///./store.db"
 
+    # ─── Auth / JWT ──────────────────────────────────────
+    # WAJIB di-set lewat env var di production. Default hanya untuk dev lokal.
+    secret_key: str = "hjswbvgfjewht48whsdkvgds"
+    algorithm: str = "HS256"
+    token_expire_minutes: int = 60 * 24  # 1 hari
+
     # ─── Frontend ────────────────────────────────────────
     # URL frontend yang dituju setelah scan QR dining table.
     frontend_url: str = "http://localhost:3000"
