@@ -23,7 +23,7 @@ class Withdrawal(Base):
     id             = Column(Integer, primary_key=True, index=True)
     merchant_id    = Column(Integer, ForeignKey("merchants.id"), nullable=False, index=True)
     amount         = Column(Float, nullable=False)
-    status         = Column(Enum(WithdrawalStatus), nullable=False, default=WithdrawalStatus.PENDING, index=True)
+    status         = Column(Enum(WithdrawalStatus, name="withdrawal_status", values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=WithdrawalStatus.PENDING, index=True)
     bank           = Column(String(50))
     account_number = Column(String(40))
     account_name   = Column(String(100))

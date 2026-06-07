@@ -21,7 +21,7 @@ class Refund(Base):
     nominal       = Column(Float, nullable=False)
     metode_refund = Column(String(100), nullable=True)  # mis. "Transfer BCA"
     nomor_tujuan  = Column(String(100), nullable=True)  # nomor rekening tujuan
-    status        = Column(Enum(StatusRefund), nullable=False, default=StatusRefund.PENDING)
+    status        = Column(Enum(StatusRefund, name="status_refund", values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=StatusRefund.PENDING)
     timestamp     = Column(DateTime(timezone=True), server_default=func.now())
 
     pesanan = relationship("CustomerOrder")

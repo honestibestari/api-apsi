@@ -43,10 +43,10 @@ class CustomerOrder(Base):
                                default=_generate_order_code, nullable=False)
     customer_id       = Column(Integer, ForeignKey("customers.id"), nullable=False, index=True)
     dining_table_id   = Column(Integer, ForeignKey("dining_tables.id"), nullable=True)
-    tipe_order        = Column(Enum(TipeOrder), nullable=False, default=TipeOrder.DINE_IN)
-    status            = Column(Enum(CustomerOrderStatus), nullable=False,
+    tipe_order        = Column(Enum(TipeOrder, name="tipe_order", values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=TipeOrder.DINE_IN)
+    status            = Column(Enum(CustomerOrderStatus, name="customer_order_status", values_callable=lambda obj: [e.value for e in obj]), nullable=False,
                                default=CustomerOrderStatus.VERIFYING, index=True)
-    metode_pembayaran = Column(Enum(MetodePembayaran), nullable=False,
+    metode_pembayaran = Column(Enum(MetodePembayaran, name="metode_pembayaran", values_callable=lambda obj: [e.value for e in obj]), nullable=False,
                                default=MetodePembayaran.QRIS)
     catatan           = Column(Text, nullable=True)
     total_harga       = Column(Float, nullable=False, default=0.0)

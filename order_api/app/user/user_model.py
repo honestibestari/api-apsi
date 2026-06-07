@@ -19,7 +19,10 @@ class User(Base):
     username = Column(String(100), unique=True, nullable=False)
     email = Column(String(150), unique=True, nullable=False)
     password_hash = Column(String, nullable=False)
-    role = Column(Enum(UserRole), nullable=False)
+    role = Column(
+        Enum(UserRole, name="user_role", values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+    )
 
     created_at = Column(
         DateTime(timezone=True),

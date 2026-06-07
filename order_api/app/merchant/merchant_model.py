@@ -27,7 +27,7 @@ class Merchant(Base):
     phone         = Column(String, nullable=True)
     block         = Column(String, nullable=True)
     category      = Column(String, nullable=True)
-    status        = Column(Enum(MerchantStatus), nullable=False,
+    status        = Column(Enum(MerchantStatus, name="merchant_status", values_callable=lambda obj: [e.value for e in obj]), nullable=False,
                            default=MerchantStatus.PENDING, index=True)
     created_at    = Column(DateTime(timezone=True), server_default=func.now())
 

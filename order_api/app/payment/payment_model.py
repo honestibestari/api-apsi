@@ -21,7 +21,7 @@ class Payment(Base):
     id_pesanan           = Column(Integer, ForeignKey("customer_orders.id"), nullable=False)
     metode_pembayaran_id = Column(Integer, ForeignKey("payment_methods.id"), nullable=True)
     metode_pembayaran    = Column(String(50), nullable=False)
-    status_pembayaran    = Column(Enum(StatusPembayaran), nullable=False, default=StatusPembayaran.PENDING)
+    status_pembayaran    = Column(Enum(StatusPembayaran, name="status_pembayaran", values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=StatusPembayaran.PENDING)
     nominal              = Column(Float, nullable=False)
     qrcode_kode_url      = Column(String(500), nullable=True)
     struk_dikirim        = Column(String(200), nullable=True)
