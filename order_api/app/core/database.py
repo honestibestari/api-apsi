@@ -4,6 +4,7 @@ URL database diambil dari konfigurasi (.env). Secara default memakai SQLite
 lokal, tetapi bisa diganti ke Postgres/MySQL hanya dengan mengubah DATABASE_URL.
 """
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.schema import CreateColumn
 
@@ -28,6 +29,31 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def reset_schema():
+    """DROP semua tabel + tipe enum, lalu biarkan create_all() membangun ulang.
+
+    Dipakai sekali untuk membereskan drift skema yang tidak bisa diperbaiki
+    secara additive (mis. nilai tipe enum yang berbeda). DESTRUKTIF: semua data
+    hilang. Hanya jalan jika settings.reset_db == True.
+    """
+    print("[reset_schema] DROP semua tabel & tipe enum (RESET_DB aktif)...")
+    Base.metadata.drop_all(bind=engine)
+
+    # drop_all tidak selalu menghapus tipe ENUM native Postgres. Hapus eksplisit
+    # agar create_all bisa membuat ulang sesuai definisi model terbaru.
+    if engine.dialect.name == "postgresql":
+        enum_names = {
+            col.type.name
+            for table in Base.metadata.tables.values()
+            for col in table.columns
+            if isinstance(col.type, SAEnum) and col.type.name
+        }
+        with engine.begin() as conn:
+            for enum_name in enum_names:
+                conn.execute(text(f'DROP TYPE IF EXISTS "{enum_name}" CASCADE'))
+                print(f"[reset_schema] dropped enum type {enum_name}")
 
 
 def sync_columns():

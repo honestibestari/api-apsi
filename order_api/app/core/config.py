@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     # Default: SQLite lokal di folder order_api.
     database_url: str
 
+    # Jika true, DROP semua tabel + tipe enum lalu bangun ulang dari model saat
+    # startup. HANYA untuk dev — SEMUA DATA HILANG. Set sekali untuk membereskan
+    # drift skema, lalu kembalikan ke false.
+    reset_db: bool = False
+
     # ─── Auth / JWT ──────────────────────────────────────
     # WAJIB di-set lewat env var di production. Default hanya untuk dev lokal.
     secret_key: str = "hjswbvgfjewht48whsdkvgds"

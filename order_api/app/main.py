@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
 
 from app.core.config import settings
-from app.core.database import Base, engine, sync_columns
+from app.core.database import Base, engine, sync_columns, reset_schema
 from app.db.seed import seed_data
 from app.dining_table.dining_table_router import router as dining_table_router
 from app.merchant.merchant_router import router as merchant_router
@@ -25,9 +25,12 @@ from app.tenant_settings.tenant_settings_router import router as tenant_settings
 from app.user_notification.notification_user_router import router as notification_user_router
 
 # Model diregistrasi di app/__init__.py saat package load.
+# 0) Jika RESET_DB=true: drop semua tabel + enum (sekali, untuk bereskan drift).
 # 1) Buat tabel yang belum ada.
 # 2) Tambahkan kolom baru ke tabel lama (create_all tidak meng-ALTER).
 # 3) Isi data awal.
+if settings.reset_db:
+    reset_schema()
 Base.metadata.create_all(bind=engine)
 sync_columns()
 seed_data()
