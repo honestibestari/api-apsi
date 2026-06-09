@@ -1,10 +1,11 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
+from app.core.auth import require_admin
 from app.core.database import get_db
 from app.merchant import merchant_service
 from app.merchant.merchant_schema import (MerchantCreate, MerchantDetail, MerchantSummary, MerchantUpdate)
- 
+
 router = APIRouter(prefix="/merchants", tags=["Merchants"])
  
 # get
@@ -24,15 +25,24 @@ def detail_merchant(merchant_id: int, db: Session = Depends(get_db)):
     return merchant_service.get_merchant_or_404(db, merchant_id)
  
  
- # update
-@router.put("/{merchant_id}", response_model=MerchantDetail, summary="Update merchant (partial update)")
-def update_merchant(merchant_id: int, data: MerchantUpdate, db: Session = Depends(get_db)):
+# update — hanya admin
+@router.put("/{merchant_id}", response_model=MerchantDetail, summary="[Admin] Update merchant (partial update)")
+def update_merchant(
+    merchant_id: int,
+    data: MerchantUpdate,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
     """Update field merchant. Kirim **hanya field yang ingin diubah**."""
     return merchant_service.update_merchant(db, merchant_id, data)
- 
- 
- # delete
-@router.delete("/{merchant_id}",summary="Hapus merchant beserta semua product-nya")
-def delete_merchant(merchant_id: int, db: Session = Depends(get_db)):
+
+
+# delete — hanya admin
+@router.delete("/{merchant_id}", summary="[Admin] Hapus merchant beserta semua product-nya")
+def delete_merchant(
+    merchant_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
     """Hapus merchant dan **semua product** miliknya (cascade delete)."""
     return merchant_service.delete_merchant(db, merchant_id)

@@ -1,9 +1,13 @@
 from datetime import datetime
 from typing import List, Optional
-from fastapi import HTTPException
-from sqlalchemy.orm import Session
 
+from fastapi import HTTPException
+from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload
+
+from app.merchant.merchant_model import Merchant
 from app.withdrawal.withdrawal_model import Withdrawal, WithdrawalStatus
+from app.withdrawal.withdrawal_schema import WithdrawalSummary, WithdrawalStatusSummary
 
 
 def list_withdrawals(
@@ -13,7 +17,11 @@ def list_withdrawals(
     offset: int = 0,
     limit: int = 20,
 ) -> List[Withdrawal]:
-    query = db.query(Withdrawal).order_by(Withdrawal.created_at.desc())
+    query = (
+        db.query(Withdrawal)
+        .options(joinedload(Withdrawal.merchant))
+        .order_by(Withdrawal.requested_at.desc())
+    )
     if merchant_id:
         query = query.filter(Withdrawal.merchant_id == merchant_id)
     if status:
@@ -21,7 +29,57 @@ def list_withdrawals(
     return query.offset(offset).limit(limit).all()
 
 
+def get_summary(db: Session) -> WithdrawalSummary:
+    rows = (
+        db.query(
+            Withdrawal.status,
+            func.count(Withdrawal.id).label("count"),
+            func.coalesce(func.sum(Withdrawal.amount), 0).label("total_amount"),
+        )
+        .group_by(Withdrawal.status)
+        .all()
+    )
+    result = {
+        s: WithdrawalStatusSummary(count=0, total_amount=0.0)
+        for s in ("pending", "approved", "rejected")
+    }
+    for row in rows:
+        result[row.status] = WithdrawalStatusSummary(
+            count=row.count, total_amount=float(row.total_amount)
+        )
+    return WithdrawalSummary(**result)
+
+
+def _available_balance(merchant: Merchant) -> float:
+    """Saldo setelah dikurangi withdrawal APPROVED dan PENDING."""
+    locked = sum(
+        w.amount
+        for w in merchant.withdrawals
+        if w.status in (WithdrawalStatus.APPROVED, WithdrawalStatus.PENDING)
+    )
+    return merchant.balance - locked
+
+
 def create_withdrawal(db: Session, merchant_id: int, data) -> Withdrawal:
+    merchant = (
+        db.query(Merchant)
+        .options(
+            joinedload(Merchant.withdrawals),
+            joinedload(Merchant.merchant_orders),
+        )
+        .filter(Merchant.id == merchant_id)
+        .first()
+    )
+    if not merchant:
+        raise HTTPException(404, "Merchant tidak ditemukan")
+
+    available = _available_balance(merchant)
+    if data.amount > available:
+        raise HTTPException(
+            400,
+            f"Saldo tidak cukup. Saldo tersedia: Rp {available:,.0f}",
+        )
+
     w = Withdrawal(
         merchant_id    = merchant_id,
         amount         = data.amount,
@@ -36,28 +94,58 @@ def create_withdrawal(db: Session, merchant_id: int, data) -> Withdrawal:
     return w
 
 
-def approve_withdrawal(db: Session, withdrawal_id: int) -> Withdrawal:
-    w = db.query(Withdrawal).filter(Withdrawal.id == withdrawal_id).first()
+def approve_withdrawal(
+    db: Session, withdrawal_id: int, processed_by: Optional[int] = None
+) -> Withdrawal:
+    w = (
+        db.query(Withdrawal)
+        .options(joinedload(Withdrawal.merchant).joinedload(Merchant.withdrawals))
+        .options(joinedload(Withdrawal.merchant).joinedload(Merchant.merchant_orders))
+        .filter(Withdrawal.id == withdrawal_id)
+        .with_for_update()
+        .first()
+    )
     if not w:
         raise HTTPException(404, "Withdrawal tidak ditemukan")
     if w.status != WithdrawalStatus.PENDING:
         raise HTTPException(400, f"Withdrawal sudah berstatus '{w.status}'")
+
+    # Validasi ulang saldo saat approve (saldo bisa berubah sejak diajukan)
+    available = _available_balance(w.merchant) + w.amount  # keluarkan pending ini sendiri
+    if w.amount > available:
+        raise HTTPException(
+            400,
+            f"Saldo merchant tidak mencukupi saat approve. Tersedia: Rp {available:,.0f}",
+        )
+
     w.status       = WithdrawalStatus.APPROVED
     w.processed_at = datetime.now()
+    w.processed_by = processed_by
     w.note         = "Disetujui oleh admin"
     db.commit()
     db.refresh(w)
     return w
 
 
-def reject_withdrawal(db: Session, withdrawal_id: int, note: Optional[str] = None) -> Withdrawal:
-    w = db.query(Withdrawal).filter(Withdrawal.id == withdrawal_id).first()
+def reject_withdrawal(
+    db: Session,
+    withdrawal_id: int,
+    note: Optional[str] = None,
+    processed_by: Optional[int] = None,
+) -> Withdrawal:
+    w = (
+        db.query(Withdrawal)
+        .filter(Withdrawal.id == withdrawal_id)
+        .with_for_update()
+        .first()
+    )
     if not w:
         raise HTTPException(404, "Withdrawal tidak ditemukan")
     if w.status != WithdrawalStatus.PENDING:
         raise HTTPException(400, f"Withdrawal sudah berstatus '{w.status}'")
     w.status       = WithdrawalStatus.REJECTED
     w.processed_at = datetime.now()
+    w.processed_by = processed_by
     w.note         = note or "Ditolak oleh admin"
     db.commit()
     db.refresh(w)

@@ -7,21 +7,28 @@ from app.core.database import get_db
 from app.merchant.merchant_model import Merchant
 from app.withdrawal import withdrawal_service
 from app.withdrawal.withdrawal_model import WithdrawalStatus
-from app.withdrawal.withdrawal_schema import WithdrawalCreate, WithdrawalOut
+from app.withdrawal.withdrawal_schema import WithdrawalCreate, WithdrawalOut, WithdrawalSummary
 
 router = APIRouter(prefix="/withdrawals", tags=["Withdrawals"])
 
 
-@router.get("", response_model=List[WithdrawalOut], summary="List withdrawal")
-def list_withdrawals(
-    merchant_id: Optional[int]            = Query(None),
-    status:      Optional[WithdrawalStatus] = Query(None),
-    offset:      int = Query(0, ge=0),
-    limit:       int = Query(20, ge=1, le=100),
+@router.get("/summary", response_model=WithdrawalSummary, summary="[Admin] Ringkasan statistik withdrawal")
+def withdrawal_summary(
     db: Session = Depends(get_db),
     _=Depends(require_admin),
 ):
-    """[Admin] List semua withdrawal dengan filter."""
+    return withdrawal_service.get_summary(db)
+
+
+@router.get("", response_model=List[WithdrawalOut], summary="[Admin] List semua withdrawal")
+def list_withdrawals(
+    merchant_id: Optional[int]              = Query(None),
+    status:      Optional[WithdrawalStatus] = Query(None),
+    offset:      int = Query(0, ge=0),
+    limit:       int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
     return withdrawal_service.list_withdrawals(
         db, merchant_id=merchant_id, status=status, offset=offset, limit=limit
     )
@@ -56,9 +63,11 @@ def create_withdrawal(
 def approve_withdrawal(
     withdrawal_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_admin),
+    current_admin=Depends(require_admin),
 ):
-    return withdrawal_service.approve_withdrawal(db, withdrawal_id)
+    return withdrawal_service.approve_withdrawal(
+        db, withdrawal_id, processed_by=current_admin.id
+    )
 
 
 @router.put("/{withdrawal_id}/reject", response_model=WithdrawalOut,
@@ -67,6 +76,8 @@ def reject_withdrawal(
     withdrawal_id: int,
     note: Optional[str] = Query(None, description="Alasan penolakan"),
     db: Session = Depends(get_db),
-    _=Depends(require_admin),
+    current_admin=Depends(require_admin),
 ):
-    return withdrawal_service.reject_withdrawal(db, withdrawal_id, note=note)
+    return withdrawal_service.reject_withdrawal(
+        db, withdrawal_id, note=note, processed_by=current_admin.id
+    )

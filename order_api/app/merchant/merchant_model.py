@@ -45,14 +45,6 @@ class Merchant(Base):
     categories      = relationship("Category", back_populates="tenant",
                                    cascade="all, delete-orphan")
 
-    # ← TAMBAH: relasi ke TenantBalance (TENANT → SALDO_TENANT 1:1)
-    tenant_balance  = relationship("TenantBalance", back_populates="tenant",
-                                   uselist=False)
-
-    # ← TAMBAH: relasi ke TenantSettings (TENANT → PENGATURAN_TENANT 1:1)
-    tenant_settings = relationship("TenantSettings", back_populates="tenant",
-                                   uselist=False)
-
     # ── Property kalkulasi ────────────────────────────────────────────────────
 
     @property

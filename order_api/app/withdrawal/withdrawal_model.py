@@ -28,10 +28,12 @@ class Withdrawal(Base):
     account_number = Column(String(40))
     account_name   = Column(String(100))
     note           = Column(Text, nullable=True)
+    processed_by   = Column(Integer, ForeignKey("users.id"), nullable=True)
     requested_at   = Column(DateTime(timezone=True), server_default=func.now())
     processed_at   = Column(DateTime(timezone=True), nullable=True)
 
-    merchant = relationship("Merchant", back_populates="withdrawals")
+    merchant   = relationship("Merchant", back_populates="withdrawals")
+    admin_user = relationship("User", foreign_keys=[processed_by])
 
     @property
     def merchant_nama(self):

@@ -27,9 +27,6 @@ class Customer(Base):
     # ← TAMBAH: relasi ke Review (ULASAN → USER/Customer N:1)
     reviews = relationship("Review", back_populates="customer")
 
-    # ← TAMBAH: relasi ke NotificationUser (NOTIFIKASI_USER → USER N:1)
-    notifications = relationship("NotificationUser", back_populates="user")
-
     # ── Property kalkulasi (dipakai konsol admin) ─────────────────────────────
 
     @property

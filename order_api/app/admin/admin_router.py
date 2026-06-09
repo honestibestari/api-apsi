@@ -9,8 +9,6 @@ from app.customer_order.customer_order_model import CustomerOrder, CustomerOrder
 from app.merchant.merchant_model import Merchant, MerchantStatus
 from app.merchant_order.merchant_order_model import MerchantOrder
 from app.customer.customer_model import Customer
-from app.withdrawal.withdrawal_model import Withdrawal
-
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
 
@@ -115,64 +113,3 @@ def list_all_orders(
     if status:
         query = query.filter(CustomerOrder.status == status)
     return query.offset(offset).limit(limit).all()
-
-
-# ── Pantau keuangan (withdrawal) ──────────────────────────────────────────────
-
-@router.get("/withdrawals", summary="List semua penarikan dana")
-def list_withdrawals(
-    offset: int = Query(0, ge=0),
-    limit:  int = Query(50, ge=1, le=200),
-    db: Session = Depends(get_db),
-    _: None = Depends(require_admin),
-):
-    return (
-        db.query(Withdrawal)
-        .order_by(Withdrawal.requested_at.desc())
-        .offset(offset).limit(limit).all()
-    )
-
-
-@router.put("/withdrawals/{withdrawal_id}/approve", summary="Setujui penarikan dana")
-def approve_withdrawal(
-    withdrawal_id: int,
-    db: Session = Depends(get_db),
-    _: None = Depends(require_admin),
-):
-    from fastapi import HTTPException
-    from app.withdrawal.withdrawal_model import WithdrawalStatus
-    from datetime import datetime
-
-    w = db.query(Withdrawal).filter(Withdrawal.id == withdrawal_id).first()
-    if not w:
-        raise HTTPException(404, "Withdrawal tidak ditemukan")
-    if w.status != WithdrawalStatus.PENDING:
-        raise HTTPException(400, f"Withdrawal sudah berstatus {w.status}")
-    w.status = WithdrawalStatus.APPROVED
-    w.processed_at = datetime.now()
-    w.note = "Disetujui oleh admin"
-    db.commit()
-    return {"message": "Withdrawal disetujui", "id": withdrawal_id}
-
-
-@router.put("/withdrawals/{withdrawal_id}/reject", summary="Tolak penarikan dana")
-def reject_withdrawal(
-    withdrawal_id: int,
-    note: Optional[str] = Query(None, description="Alasan penolakan"),
-    db: Session = Depends(get_db),
-    _: None = Depends(require_admin),
-):
-    from fastapi import HTTPException
-    from app.withdrawal.withdrawal_model import WithdrawalStatus
-    from datetime import datetime
-
-    w = db.query(Withdrawal).filter(Withdrawal.id == withdrawal_id).first()
-    if not w:
-        raise HTTPException(404, "Withdrawal tidak ditemukan")
-    if w.status != WithdrawalStatus.PENDING:
-        raise HTTPException(400, f"Withdrawal sudah berstatus {w.status}")
-    w.status = WithdrawalStatus.REJECTED
-    w.processed_at = datetime.now()
-    w.note = note or "Ditolak oleh admin"
-    db.commit()
-    return {"message": "Withdrawal ditolak", "id": withdrawal_id}
