@@ -132,6 +132,7 @@ class CustomerOrderSummary(BaseModel):
     total_harga:       float
     tenant_count:      int
     no_meja:           Optional[str] = None
+    customer_id:       Optional[int] = None
     customer_nama:     Optional[str] = None
     created_at:        datetime
 

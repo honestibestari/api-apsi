@@ -22,11 +22,15 @@ env/
 *.sqlite
 *.sqlite3
 
-# IDE
+# IDE / tooling
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
+
+# Dev helper lokal (DB reset/seed manual) — tidak perlu ikut deploy
+reset_and_seed.py
 
 # OS
 .DS_Store

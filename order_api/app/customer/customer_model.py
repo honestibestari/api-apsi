@@ -16,6 +16,8 @@ class Customer(Base):
     session_id  = Column(String(200), nullable=True)
     expired_id  = Column(DateTime(timezone=True), nullable=True)
     minta_struk = Column(Boolean, nullable=False, default=False)
+    # Penanda admin untuk customer yang dicurigai/diawasi (mis. fraud). Persist di DB.
+    flagged     = Column(Boolean, nullable=False, default=False)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
     updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -27,3 +29,26 @@ class Customer(Base):
 
     # ← TAMBAH: relasi ke NotificationUser (NOTIFIKASI_USER → USER N:1)
     notifications = relationship("NotificationUser", back_populates="user")
+
+    # ── Property kalkulasi (dipakai konsol admin) ─────────────────────────────
+
+    @property
+    def total_orders(self) -> int:
+        return len(self.orders)
+
+    @property
+    def total_spent(self) -> float:
+        """Total belanja = Σ total_harga semua order yang tidak dibatalkan."""
+        from app.customer_order.customer_order_model import CustomerOrderStatus
+        return sum(
+            o.total_harga
+            for o in self.orders
+            if o.status != CustomerOrderStatus.CANCELLED
+        )
+
+    @property
+    def last_order_at(self):
+        """Waktu order terakhir, atau None bila belum pernah order."""
+        if not self.orders:
+            return None
+        return max(o.created_at for o in self.orders if o.created_at)

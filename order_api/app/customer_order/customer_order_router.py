@@ -35,11 +35,14 @@ def create_customer_order(data: CustomerOrderCreate, db: Session = Depends(get_d
 )
 def list_customer_orders(
     status: Optional[CustomerOrderStatus] = Query(None, description="Filter status customer order"),
+    customer_id: Optional[int] = Query(None, description="Filter order milik satu customer"),
     offset: int = Query(0, ge=0),
     limit:  int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
 ):
-    return customer_order_service.list_customer_orders(db, status=status, offset=offset, limit=limit)
+    return customer_order_service.list_customer_orders(
+        db, status=status, customer_id=customer_id, offset=offset, limit=limit
+    )
 
 
 @router.get(

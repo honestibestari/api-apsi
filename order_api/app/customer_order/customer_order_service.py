@@ -119,6 +119,7 @@ def get_customer_order_or_404(db: Session, order_id: int) -> CustomerOrder:
 def list_customer_orders(
     db: Session,
     status: Optional[CustomerOrderStatus] = None,
+    customer_id: Optional[int] = None,
     offset: int = 0,
     limit: int = 50,
 ) -> List[CustomerOrder]:
@@ -133,6 +134,8 @@ def list_customer_orders(
     )
     if status:
         query = query.filter(CustomerOrder.status == status)
+    if customer_id is not None:
+        query = query.filter(CustomerOrder.customer_id == customer_id)
     return query.offset(offset).limit(limit).all()
 
 

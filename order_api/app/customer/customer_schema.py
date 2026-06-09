@@ -24,17 +24,23 @@ class CustomerUpdate(BaseModel):
     phone:       Optional[str] = None
     no_wa:       Optional[str] = None
     minta_struk: Optional[bool] = None
+    flagged:     Optional[bool] = None
 
 
 class CustomerOut(BaseModel):
-    id:          int
-    nama:        str
-    email:       Optional[str] = None
-    phone:       Optional[str] = None
-    no_wa:       Optional[str] = None
-    minta_struk: bool
-    created_at:  datetime
-    updated_at:  Optional[datetime] = None
+    id:            int
+    nama:          str
+    email:         Optional[str] = None
+    phone:         Optional[str] = None
+    no_wa:         Optional[str] = None
+    minta_struk:   bool
+    flagged:       bool
+    created_at:    datetime
+    updated_at:    Optional[datetime] = None
+    # Agregat turunan (dari property model) untuk konsol admin.
+    total_orders:  int = 0
+    total_spent:   float = 0.0
+    last_order_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 
