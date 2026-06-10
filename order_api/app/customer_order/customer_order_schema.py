@@ -19,16 +19,16 @@ class PaymentMethodInfo(BaseModel):
 # ── Input ──────────────────────────────────────────────────────────────────────
 
 class CustomerInfo(BaseModel):
-    nama: str
-    email: Optional[str] = None
-    phone: Optional[str] = None
+    email: str                               # WAJIB — kunci identitas customer
+    nama:  Optional[str] = None              # opsional; default dari email
+    phone: Optional[str] = None              # data pelengkap, boleh berubah
 
-    @field_validator("nama")
+    @field_validator("email")
     @classmethod
-    def nama_tidak_kosong(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("Nama pelanggan tidak boleh kosong")
+    def email_valid(cls, v: str) -> str:
+        v = (v or "").strip().lower()
+        if not v or "@" not in v:
+            raise ValueError("Email wajib diisi dan harus valid")
         return v
 
 

@@ -3,6 +3,8 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.customer_order import customer_order_service
+from app.customer_order.customer_order_schema import CustomerOrderOut
 from app.payment import payment_service
 from app.payment.payment_model import StatusPembayaran
 from app.payment.payment_schema import (
@@ -33,6 +35,16 @@ def charge_status(token: str, db: Session = Depends(get_db)):
              summary="Tandai LUNAS via token (pengganti webhook gateway, fase dummy)")
 def simulate_paid(token: str, db: Session = Depends(get_db)):
     return payment_service.simulate_paid(db, token)
+
+
+@router.get("/status/{token}/order", response_model=CustomerOrderOut,
+            summary="Ringkasan order terkait pembayaran (via token publik)")
+def order_by_payment_token(token: str, db: Session = Depends(get_db)):
+    """Untuk halaman 'Ringkasan Transaksi' customer (tidak login). Resolve order
+    lewat token pembayaran → detail struk multi-tenant beserta status tiap merchant.
+    """
+    payment = payment_service.get_payment_by_token_or_404(db, token)
+    return customer_order_service.get_customer_order_or_404(db, payment.id_pesanan)
 
 
 @router.get("", response_model=List[PaymentOut], summary="List pembayaran")

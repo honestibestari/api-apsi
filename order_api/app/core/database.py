@@ -104,6 +104,11 @@ def apply_manual_migrations():
                 conn.execute(text('DROP TYPE IF EXISTS metode_pembayaran'))
                 print("[migrate] customer_orders.metode_pembayaran enum → FK payment_methods")
 
+    # ── customers.phone: lepas UNIQUE (phone kini sekadar data, boleh berubah) ──
+    if "customers" in tables:
+        with engine.begin() as conn:
+            conn.execute(text('ALTER TABLE customers DROP CONSTRAINT IF EXISTS customers_phone_key'))
+
     # ── payments: drop struk_dikirim + backfill public_token ────────────────────
     if "payments" in tables:
         cols = {c["name"] for c in inspector.get_columns("payments")}

@@ -10,8 +10,10 @@ class Customer(Base):
 
     id          = Column(Integer, primary_key=True, index=True)
     nama        = Column(String(100), nullable=False)
+    # Email = identitas/kunci dedup customer (unik).
     email       = Column(String(150), unique=True, index=True, nullable=True)
-    phone       = Column(String(30),  unique=True, index=True, nullable=True)
+    # Phone = data pelengkap saja: TIDAK unik, boleh berubah/duplikat kapan saja.
+    phone       = Column(String(30),  index=True, nullable=True)
     no_wa       = Column(String(30),  nullable=True)
     session_id  = Column(String(200), nullable=True)
     expired_id  = Column(DateTime(timezone=True), nullable=True)

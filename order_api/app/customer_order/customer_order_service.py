@@ -45,43 +45,31 @@ def _load_customer_order(db: Session, order_id: int) -> CustomerOrder:
 # ── Upsert customer — di LUAR create_customer_order ──────────────────────────
 
 def _upsert_customer(db: Session, data_customer) -> Customer:
-    """Ambil customer lama atau buat baru.
+    """Ambil customer lama (by EMAIL) atau buat baru.
 
-    Cari by email dulu, kalau tidak ketemu cari by phone.
-    Kalau ketemu, update data yang berubah.
-    Kalau tidak ketemu sama sekali, buat baru.
+    Email = satu-satunya kunci identitas (unik). Phone hanya data pelengkap:
+    selalu diperbarui ke nilai terbaru, boleh berubah/duplikat tanpa konflik.
     """
-    customer = None
+    nama_default = data_customer.nama or data_customer.email.split("@")[0]
 
-    # Cari by email
-    if data_customer.email:
-        customer = (
-            db.query(Customer)
-            .filter(Customer.email == data_customer.email)
-            .first()
-        )
-
-    # Kalau tidak ketemu by email, cari by phone
-    if not customer and data_customer.phone:
-        customer = (
-            db.query(Customer)
-            .filter(Customer.phone == data_customer.phone)
-            .first()
-        )
+    customer = (
+        db.query(Customer)
+        .filter(Customer.email == data_customer.email)
+        .first()
+    )
 
     if customer:
-        # Customer lama — update data jika ada perubahan
+        # Customer lama — perbarui data terbaru.
         if data_customer.nama and customer.nama != data_customer.nama:
             customer.nama = data_customer.nama
+        # Phone bukan kunci → boleh berubah kapan saja (termasuk dikosongkan? tidak,
+        # hanya timpa bila dikirim agar tidak menghapus data lama tanpa sengaja).
         if data_customer.phone and customer.phone != data_customer.phone:
             customer.phone = data_customer.phone
-        if data_customer.email and customer.email != data_customer.email:
-            customer.email = data_customer.email
         db.flush()
     else:
-        # Customer baru
         customer = Customer(
-            nama  = data_customer.nama,
+            nama  = nama_default,
             email = data_customer.email,
             phone = data_customer.phone,
         )
