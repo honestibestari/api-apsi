@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.customer_order.customer_order_model import CustomerOrder, CustomerOrderStatus
+from app.merchant_order.merchant_order_model import MerchantOrderStatus
 from app.payment.payment_model import Payment, StatusPembayaran
 from app.payment.payment_schema import ChargeResponse, PaymentCreate
 from app.payment_method.payment_method_model import PaymentMethod
@@ -109,16 +110,37 @@ def charge(db: Session, id_pesanan: int, metode_pembayaran_id: int) -> ChargeRes
     order.metode_pembayaran_id = metode.id
 
     # Tunai (type=manual) tidak lewat gateway → langsung dianggap selesai
-    # (dibayar di kasir). Order langsung dibuka, FE langsung ke layar sukses.
+    # (dibayar di kasir). FE langsung ke layar sukses.
     if tipe == "manual":
-        payment.status_pembayaran = StatusPembayaran.LUNAS
-        payment.paid_at = datetime.now(timezone.utc)
-        if order.status == CustomerOrderStatus.VERIFYING:
-            order.status = CustomerOrderStatus.OPEN
+        _settle_payment(payment)
 
     db.commit()
     db.refresh(payment)
     return _build_charge_response(payment, metode)
+
+
+def _settle_payment(payment: Payment) -> None:
+    """Tandai pembayaran LUNAS + SINKRONKAN kedua dokumen order. Idempotent.
+
+    Saat pembayaran selesai:
+      • CustomerOrder: verifying → open
+      • tiap MerchantOrder yang masih 'baru' → 'terbuka' (open), siap di-confirm/
+        tolak oleh merchant.
+    Tidak commit — pemanggil yang commit.
+    """
+    if payment.status_pembayaran == StatusPembayaran.LUNAS:
+        return
+    payment.status_pembayaran = StatusPembayaran.LUNAS
+    payment.paid_at = datetime.now(timezone.utc)
+
+    order = payment.pesanan
+    if not order:
+        return
+    if order.status == CustomerOrderStatus.VERIFYING:
+        order.status = CustomerOrderStatus.OPEN
+    for mo in order.merchant_orders:
+        if mo.status == MerchantOrderStatus.BARU:
+            mo.status = MerchantOrderStatus.TERBUKA
 
 
 def _auto_settle_if_due(db: Session, payment: Payment) -> None:
@@ -137,11 +159,7 @@ def _auto_settle_if_due(db: Session, payment: Payment) -> None:
         created = created.replace(tzinfo=timezone.utc)
     if (datetime.now(timezone.utc) - created).total_seconds() < secs:
         return
-    payment.status_pembayaran = StatusPembayaran.LUNAS
-    payment.paid_at = datetime.now(timezone.utc)
-    order = payment.pesanan
-    if order and order.status == CustomerOrderStatus.VERIFYING:
-        order.status = CustomerOrderStatus.OPEN
+    _settle_payment(payment)
     db.commit()
     db.refresh(payment)
 
@@ -164,17 +182,11 @@ def get_charge_status(db: Session, token: str) -> ChargeResponse:
 
 
 def simulate_paid(db: Session, token: str) -> ChargeResponse:
-    """Pengganti webhook gateway: tandai pembayaran LUNAS & buka order."""
+    """Pengganti webhook gateway: tandai pembayaran LUNAS & sinkronkan order."""
     payment = get_payment_by_token_or_404(db, token)
-    if payment.status_pembayaran != StatusPembayaran.LUNAS:
-        payment.status_pembayaran = StatusPembayaran.LUNAS
-        payment.paid_at = datetime.now(timezone.utc)
-        # Order yang masih VERIFYING dianggap terkonfirmasi → OPEN.
-        order = db.query(CustomerOrder).filter(CustomerOrder.id == payment.id_pesanan).first()
-        if order and order.status == CustomerOrderStatus.VERIFYING:
-            order.status = CustomerOrderStatus.OPEN
-        db.commit()
-        db.refresh(payment)
+    _settle_payment(payment)
+    db.commit()
+    db.refresh(payment)
     metode = db.query(PaymentMethod).filter(PaymentMethod.id == payment.metode_pembayaran_id).first()
     if not metode:
         metode = PaymentMethod(id=payment.metode_pembayaran_id or 0, nama_metode=payment.metode_pembayaran)

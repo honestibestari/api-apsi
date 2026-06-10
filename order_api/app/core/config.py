@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     # status). Set 0 untuk menonaktifkan (mis. saat gateway asli sudah dipasang).
     dummy_payment_auto_paid_seconds: int = 20
 
+    # Batas waktu merchant memutuskan (confirm/tolak) sebuah merchant order setelah
+    # dibayar. Lewat ambang ini & masih 'terbuka' → otomatis dibatalkan. Set 0 = off.
+    merchant_decide_timeout_seconds: int = 600  # 10 menit
+
     # ─── CORS ────────────────────────────────────────────
     # Daftar origin dipisah koma, mis. "http://localhost:3000,http://localhost:5173"
     cors_origins: str = "*"

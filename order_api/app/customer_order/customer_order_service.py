@@ -1,8 +1,10 @@
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.config import settings
 from app.customer.customer_model import Customer
 from app.customer_order.customer_order_model import CustomerOrder, CustomerOrderStatus
 from app.customer_order.customer_order_schema import CustomerOrderCreate
@@ -82,15 +84,49 @@ def _upsert_customer(db: Session, data_customer) -> Customer:
 # ── Sinkronisasi status ───────────────────────────────────────────────────────
 
 def derive_customer_status(merchant_orders) -> CustomerOrderStatus:
-    """Turunkan status CustomerOrder dari status tiap MerchantOrder."""
+    """Turunkan status CustomerOrder dari status tiap MerchantOrder.
+
+    Merchant order 'dibatalkan' diabaikan; hanya bila SEMUA dibatalkan struk
+    dianggap cancelled. Begitu ada tenant yang 'selesai' atau 'diproses'
+    (sudah ada aktivitas), struk dianggap 'process' — 'open' hanya saat semua
+    tenant masih 'terbuka'/'baru'.
+    """
     active = [m for m in merchant_orders if m.status != MerchantOrderStatus.DIBATALKAN]
     if not active:
         return CustomerOrderStatus.CANCELLED
     if all(m.status == MerchantOrderStatus.SELESAI for m in active):
         return CustomerOrderStatus.WAITING_CONFIRMATION
-    if any(m.status == MerchantOrderStatus.DIPROSES for m in active):
+    if any(m.status in (MerchantOrderStatus.DIPROSES, MerchantOrderStatus.SELESAI) for m in active):
         return CustomerOrderStatus.PROCESS
     return CustomerOrderStatus.OPEN
+
+
+def _auto_cancel_stale_merchant_orders(customer_order: CustomerOrder) -> bool:
+    """Batalkan merchant order yang masih 'terbuka' melewati batas waktu putusan.
+
+    Merchant yang tidak confirm/tolak dalam merchant_decide_timeout_seconds →
+    otomatis 'dibatalkan'. Return True bila ada perubahan.
+    TODO(refund): recompute total_harga & catat refund saat tenant dibatalkan.
+    """
+    secs = settings.merchant_decide_timeout_seconds
+    if secs <= 0 or customer_order.status in (
+        CustomerOrderStatus.VERIFYING, CustomerOrderStatus.DONE, CustomerOrderStatus.CANCELLED
+    ):
+        return False
+    now = datetime.now(timezone.utc)
+    changed = False
+    for mo in customer_order.merchant_orders:
+        if mo.status != MerchantOrderStatus.TERBUKA:
+            continue
+        ref = mo.updated_at or mo.created_at      # waktu mo menjadi 'terbuka'
+        if ref is None:
+            continue
+        if ref.tzinfo is None:
+            ref = ref.replace(tzinfo=timezone.utc)
+        if (now - ref).total_seconds() >= secs:
+            mo.status = MerchantOrderStatus.DIBATALKAN
+            changed = True
+    return changed
 
 
 def sync_customer_order_status(customer_order: CustomerOrder) -> None:
@@ -100,10 +136,21 @@ def sync_customer_order_status(customer_order: CustomerOrder) -> None:
     customer_order.status = derive_customer_status(customer_order.merchant_orders)
 
 
+def refresh_order_state(db: Session, customer_order: CustomerOrder) -> None:
+    """Terapkan timeout merchant + turunkan ulang status struk. Commit bila berubah."""
+    before = customer_order.status
+    timed_out = _auto_cancel_stale_merchant_orders(customer_order)
+    sync_customer_order_status(customer_order)
+    if timed_out or customer_order.status != before:
+        db.commit()
+
+
 # ── Query ─────────────────────────────────────────────────────────────────────
 
 def get_customer_order_or_404(db: Session, order_id: int) -> CustomerOrder:
-    return _load_customer_order(db, order_id)
+    order = _load_customer_order(db, order_id)
+    refresh_order_state(db, order)   # terapkan timeout merchant + status terkini
+    return order
 
 
 def list_customer_orders(
