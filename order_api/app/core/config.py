@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     # URL frontend yang dituju setelah scan QR dining table.
     frontend_url: str = "http://localhost:3000"
 
+    # ─── Pembayaran (mode dummy) ─────────────────────────
+    # Selama belum ada gateway asli: pembayaran non-tunai yang masih PENDING akan
+    # otomatis dianggap LUNAS setelah sekian detik (disimulasikan saat FE polling
+    # status). Set 0 untuk menonaktifkan (mis. saat gateway asli sudah dipasang).
+    dummy_payment_auto_paid_seconds: int = 20
+
     # ─── CORS ────────────────────────────────────────────
     # Daftar origin dipisah koma, mis. "http://localhost:3000,http://localhost:5173"
     cors_origins: str = "*"

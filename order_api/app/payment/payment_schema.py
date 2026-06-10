@@ -21,6 +21,7 @@ class ChargeResponse(BaseModel):
       - "manual"   → cukup `instructions` (mis. bayar di kasir)
     """
     payment_id:     int
+    payment_token:  str                  # dipakai FE untuk link status (bukan id)
     transaction_id: str
     status:         StatusPembayaran
     method:         str                  # nama metode (mis. "QRIS", "BCA")

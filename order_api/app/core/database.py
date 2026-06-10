@@ -104,13 +104,19 @@ def apply_manual_migrations():
                 conn.execute(text('DROP TYPE IF EXISTS metode_pembayaran'))
                 print("[migrate] customer_orders.metode_pembayaran enum → FK payment_methods")
 
-    # ── payments.struk_dikirim → DROP (tidak dipakai flow pembayaran) ───────────
+    # ── payments: drop struk_dikirim + backfill public_token ────────────────────
     if "payments" in tables:
         cols = {c["name"] for c in inspector.get_columns("payments")}
-        if "struk_dikirim" in cols:
-            with engine.begin() as conn:
+        with engine.begin() as conn:
+            if "struk_dikirim" in cols:
                 conn.execute(text('ALTER TABLE payments DROP COLUMN IF EXISTS struk_dikirim'))
                 print("[migrate] dropped payments.struk_dikirim (tak terpakai)")
+            # Baris lama (sebelum kolom ada) bertoken NULL → isi token acak.
+            if "public_token" in cols:
+                conn.execute(text(
+                    "UPDATE payments SET public_token = md5(random()::text || id::text) "
+                    "WHERE public_token IS NULL"
+                ))
 
 
 def sync_columns():

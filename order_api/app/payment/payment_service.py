@@ -41,6 +41,7 @@ def _build_charge_response(payment: Payment, metode: PaymentMethod) -> ChargeRes
     order = payment.pesanan
     return ChargeResponse(
         payment_id     = payment.id,
+        payment_token  = payment.public_token,
         transaction_id = payment.transaction_id,
         status         = payment.status_pembayaran,
         method         = metode.nama_metode,
@@ -102,18 +103,59 @@ def charge(db: Session, id_pesanan: int, metode_pembayaran_id: int) -> ChargeRes
         payment.va_number = f"8808{payment.id:010d}"
     elif tipe == "redirect":
         base = settings.frontend_url.rstrip("/")
-        payment.payment_url = f"{base}/payment/simulate/{payment.id}"
+        payment.payment_url = f"{base}/payment/status/{payment.public_token}"
 
     # Jaga konsistensi: metode terpilih juga tercatat di order.
     order.metode_pembayaran_id = metode.id
+
+    # Tunai (type=manual) tidak lewat gateway → langsung dianggap selesai
+    # (dibayar di kasir). Order langsung dibuka, FE langsung ke layar sukses.
+    if tipe == "manual":
+        payment.status_pembayaran = StatusPembayaran.LUNAS
+        payment.paid_at = datetime.now(timezone.utc)
+        if order.status == CustomerOrderStatus.VERIFYING:
+            order.status = CustomerOrderStatus.OPEN
 
     db.commit()
     db.refresh(payment)
     return _build_charge_response(payment, metode)
 
 
-def get_charge_status(db: Session, payment_id: int) -> ChargeResponse:
-    payment = get_payment_or_404(db, payment_id)
+def _auto_settle_if_due(db: Session, payment: Payment) -> None:
+    """Mode dummy: auto-LUNAS bila pembayaran PENDING sudah lewat ambang detik.
+
+    Pengganti webhook gateway untuk demo. Nonaktif bila
+    settings.dummy_payment_auto_paid_seconds <= 0 (mis. saat gateway asli aktif).
+    """
+    secs = settings.dummy_payment_auto_paid_seconds
+    if secs <= 0 or payment.status_pembayaran != StatusPembayaran.PENDING:
+        return
+    created = payment.timestamp
+    if not created:
+        return
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    if (datetime.now(timezone.utc) - created).total_seconds() < secs:
+        return
+    payment.status_pembayaran = StatusPembayaran.LUNAS
+    payment.paid_at = datetime.now(timezone.utc)
+    order = payment.pesanan
+    if order and order.status == CustomerOrderStatus.VERIFYING:
+        order.status = CustomerOrderStatus.OPEN
+    db.commit()
+    db.refresh(payment)
+
+
+def get_payment_by_token_or_404(db: Session, token: str) -> Payment:
+    p = db.query(Payment).filter(Payment.public_token == token).first()
+    if not p:
+        raise HTTPException(404, "Pembayaran tidak ditemukan")
+    return p
+
+
+def get_charge_status(db: Session, token: str) -> ChargeResponse:
+    payment = get_payment_by_token_or_404(db, token)
+    _auto_settle_if_due(db, payment)
     metode = db.query(PaymentMethod).filter(PaymentMethod.id == payment.metode_pembayaran_id).first()
     if not metode:
         # Metode mungkin sudah dihapus; tetap kembalikan info seadanya.
@@ -121,9 +163,9 @@ def get_charge_status(db: Session, payment_id: int) -> ChargeResponse:
     return _build_charge_response(payment, metode)
 
 
-def simulate_paid(db: Session, payment_id: int) -> ChargeResponse:
+def simulate_paid(db: Session, token: str) -> ChargeResponse:
     """Pengganti webhook gateway: tandai pembayaran LUNAS & buka order."""
-    payment = get_payment_or_404(db, payment_id)
+    payment = get_payment_by_token_or_404(db, token)
     if payment.status_pembayaran != StatusPembayaran.LUNAS:
         payment.status_pembayaran = StatusPembayaran.LUNAS
         payment.paid_at = datetime.now(timezone.utc)

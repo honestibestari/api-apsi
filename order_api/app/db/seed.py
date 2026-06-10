@@ -12,19 +12,28 @@ from app.core.auth import hash_password
 
 
 def seed_payment_methods(db):
-    """Tanam metode pembayaran awal (idempotent — skip jika sudah ada)."""
-    if db.query(PaymentMethod).count() > 0:
-        return
-    methods = [
-        PaymentMethod(nama_metode="QRIS", fee="0.7%", is_active=True),
-        PaymentMethod(nama_metode="Tunai", fee="0%", is_active=True),
-        PaymentMethod(nama_metode="Transfer Bank", fee="Rp 2.500", is_active=True),
-        PaymentMethod(nama_metode="GoPay", fee="2%", is_active=True),
-        PaymentMethod(nama_metode="OVO", fee="2%", is_active=True),
+    """Pastikan katalog metode pembayaran kanonik ada (idempotent, aman FK).
+
+    Menambah metode yang belum ada (cek case-insensitive) — termasuk 'Tunai'.
+    Tidak menghapus/menimpa yang sudah ada, jadi tidak menyentuh data ber-FK
+    maupun perubahan dari admin.
+    """
+    canonical = [
+        ("QRIS",          "0.7%"),
+        ("Tunai",         "0%"),       # → type "manual": flow langsung selesai
+        ("Transfer Bank", "Rp 2.500"),
+        ("GoPay",         "2%"),
+        ("OVO",           "2%"),
     ]
-    db.add_all(methods)
-    db.commit()
-    print(f"[OK] {len(methods)} metode pembayaran ditambahkan")
+    existing = {m.nama_metode.lower() for m in db.query(PaymentMethod).all()}
+    added = 0
+    for nama, fee in canonical:
+        if nama.lower() not in existing:
+            db.add(PaymentMethod(nama_metode=nama, fee=fee, is_active=True))
+            added += 1
+    if added:
+        db.commit()
+        print(f"[OK] {added} metode pembayaran ditambahkan")
 
 
 def seed_global_categories(db):

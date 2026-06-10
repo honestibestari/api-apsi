@@ -23,16 +23,16 @@ def charge(data: ChargeRequest, db: Session = Depends(get_db)):
     return payment_service.charge(db, data.id_pesanan, data.metode_pembayaran_id)
 
 
-@router.get("/{payment_id}/status", response_model=ChargeResponse,
-            summary="Status pembayaran (untuk polling FE)")
-def charge_status(payment_id: int, db: Session = Depends(get_db)):
-    return payment_service.get_charge_status(db, payment_id)
+@router.get("/status/{token}", response_model=ChargeResponse,
+            summary="Status pembayaran via token publik (untuk polling FE)")
+def charge_status(token: str, db: Session = Depends(get_db)):
+    return payment_service.get_charge_status(db, token)
 
 
-@router.post("/{payment_id}/simulate-paid", response_model=ChargeResponse,
-             summary="Tandai LUNAS (pengganti webhook gateway, fase dummy)")
-def simulate_paid(payment_id: int, db: Session = Depends(get_db)):
-    return payment_service.simulate_paid(db, payment_id)
+@router.post("/status/{token}/simulate-paid", response_model=ChargeResponse,
+             summary="Tandai LUNAS via token (pengganti webhook gateway, fase dummy)")
+def simulate_paid(token: str, db: Session = Depends(get_db)):
+    return payment_service.simulate_paid(db, token)
 
 
 @router.get("", response_model=List[PaymentOut], summary="List pembayaran")

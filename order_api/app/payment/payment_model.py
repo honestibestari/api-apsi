@@ -1,12 +1,19 @@
 import enum
- 
+import secrets
+
 from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
- 
+
 from app.core.database import Base
- 
- 
+
+
+def _generate_public_token() -> str:
+    # ~43 char URL-safe acak. Dipakai di link status pembayaran karena customer
+    # tidak login — id sekuensial gampang ditebak (IDOR), token ini tidak.
+    return secrets.token_urlsafe(32)
+
+
 class StatusPembayaran(str, enum.Enum):
     PENDING  = "pending"
     LUNAS    = "lunas"
@@ -18,6 +25,10 @@ class Payment(Base):
     __tablename__ = "payments"
  
     id                   = Column(Integer, primary_key=True, index=True)
+    # Token publik acak untuk link status (customer tidak login). Nullable agar
+    # migrasi additive di tabel lama tidak gagal; di-backfill untuk baris lama.
+    public_token         = Column(String(64), unique=True, index=True, nullable=True,
+                                  default=_generate_public_token)
     id_pesanan           = Column(Integer, ForeignKey("customer_orders.id"), nullable=False)
     metode_pembayaran_id = Column(Integer, ForeignKey("payment_methods.id"), nullable=True)
     metode_pembayaran    = Column(String(50), nullable=False)
