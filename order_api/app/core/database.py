@@ -104,6 +104,14 @@ def apply_manual_migrations():
                 conn.execute(text('DROP TYPE IF EXISTS metode_pembayaran'))
                 print("[migrate] customer_orders.metode_pembayaran enum → FK payment_methods")
 
+    # ── payments.struk_dikirim → DROP (tidak dipakai flow pembayaran) ───────────
+    if "payments" in tables:
+        cols = {c["name"] for c in inspector.get_columns("payments")}
+        if "struk_dikirim" in cols:
+            with engine.begin() as conn:
+                conn.execute(text('ALTER TABLE payments DROP COLUMN IF EXISTS struk_dikirim'))
+                print("[migrate] dropped payments.struk_dikirim (tak terpakai)")
+
 
 def sync_columns():
     """Auto-migrasi ringan tanpa alembic.

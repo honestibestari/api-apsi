@@ -24,9 +24,16 @@ class Payment(Base):
     status_pembayaran    = Column(Enum(StatusPembayaran, name="status_pembayaran", values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=StatusPembayaran.PENDING)
     nominal              = Column(Float, nullable=False)
     qrcode_kode_url      = Column(String(500), nullable=True)
-    struk_dikirim        = Column(String(200), nullable=True)
     timestamp            = Column(DateTime(timezone=True), server_default=func.now())
- 
+
+    # ── Field bergaya gateway (dipakai dummy, siap untuk Midtrans/Flip) ──────────
+    # Diisi saat charge; bentuknya meniru respons gateway agar nanti tinggal swap.
+    transaction_id       = Column(String(64), nullable=True, index=True)
+    payment_url          = Column(String(500), nullable=True)   # type=redirect
+    va_number            = Column(String(40), nullable=True)    # type=va
+    expires_at           = Column(DateTime(timezone=True), nullable=True)
+    paid_at              = Column(DateTime(timezone=True), nullable=True)
+
     # Relasi
     pesanan = relationship("CustomerOrder")
     metode  = relationship("PaymentMethod")
