@@ -66,18 +66,43 @@ def apply_manual_migrations():
         return
 
     inspector = inspect(engine)
-    if "categories" not in inspector.get_table_names():
-        return
+    tables = set(inspector.get_table_names())
 
-    # Kategori kini GLOBAL → kolom id_tenant tidak dipakai lagi. DROP COLUMN juga
-    # otomatis membuang FK constraint-nya. IF EXISTS membuatnya idempotent.
-    existing_cols = {c["name"] for c in inspector.get_columns("categories")}
-    if "id_tenant" in existing_cols:
-        with engine.begin() as conn:
-            conn.execute(
-                text('ALTER TABLE categories DROP COLUMN IF EXISTS id_tenant')
-            )
-            print("[migrate] dropped categories.id_tenant (kategori global)")
+    # ── categories.id_tenant → DROP (kategori kini global) ──────────────────────
+    # DROP COLUMN otomatis membuang FK constraint-nya. IF EXISTS = idempotent.
+    if "categories" in tables:
+        cols = {c["name"] for c in inspector.get_columns("categories")}
+        if "id_tenant" in cols:
+            with engine.begin() as conn:
+                conn.execute(text('ALTER TABLE categories DROP COLUMN IF EXISTS id_tenant'))
+                print("[migrate] dropped categories.id_tenant (kategori global)")
+
+    # ── customer_orders.metode_pembayaran enum → FK payment_methods ─────────────
+    # Kolom FK (metode_pembayaran_id) sudah ditambahkan additive oleh sync_columns().
+    # Di sini: backfill dari enum lama lalu buang kolom enum + tipenya.
+    if "customer_orders" in tables and "payment_methods" in tables:
+        cols = {c["name"] for c in inspector.get_columns("customer_orders")}
+        if "metode_pembayaran" in cols:  # kolom enum lama masih ada → migrasikan
+            with engine.begin() as conn:
+                # Pastikan metode legacy ada agar backfill bisa mencocokkan.
+                for nama in ("QRIS", "Tunai"):
+                    conn.execute(text(
+                        "INSERT INTO payment_methods (nama_metode, is_active, fee) "
+                        "SELECT :nama, true, '' "
+                        "WHERE NOT EXISTS (SELECT 1 FROM payment_methods "
+                        "WHERE lower(nama_metode) = lower(:nama))"
+                    ), {"nama": nama})
+                # Backfill FK dari nilai enum lama (cocokkan via nama, case-insensitive).
+                conn.execute(text(
+                    "UPDATE customer_orders co SET metode_pembayaran_id = pm.id "
+                    "FROM payment_methods pm "
+                    "WHERE co.metode_pembayaran_id IS NULL "
+                    "AND lower(pm.nama_metode) = lower(co.metode_pembayaran::text)"
+                ))
+                # Buang kolom enum lama + tipenya.
+                conn.execute(text('ALTER TABLE customer_orders DROP COLUMN IF EXISTS metode_pembayaran'))
+                conn.execute(text('DROP TYPE IF EXISTS metode_pembayaran'))
+                print("[migrate] customer_orders.metode_pembayaran enum → FK payment_methods")
 
 
 def sync_columns():

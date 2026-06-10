@@ -25,11 +25,6 @@ class TipeOrder(str, enum.Enum):
     TAKEAWAY = "takeaway"
 
 
-class MetodePembayaran(str, enum.Enum):
-    QRIS  = "qris"
-    TUNAI = "tunai"
-
-
 def _generate_order_code() -> str:
     return f"ORD-{random.randint(1, 999999):06d}"
 
@@ -46,8 +41,10 @@ class CustomerOrder(Base):
     tipe_order        = Column(Enum(TipeOrder, name="tipe_order", values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=TipeOrder.DINE_IN)
     status            = Column(Enum(CustomerOrderStatus, name="customer_order_status", values_callable=lambda obj: [e.value for e in obj]), nullable=False,
                                default=CustomerOrderStatus.VERIFYING, index=True)
-    metode_pembayaran = Column(Enum(MetodePembayaran, name="metode_pembayaran", values_callable=lambda obj: [e.value for e in obj]), nullable=False,
-                               default=MetodePembayaran.QRIS)
+    # Metode pembayaran kini FK ke tabel payment_methods (bukan enum), agar selaras
+    # dengan daftar yang dikelola admin & dipilih customer. Nullable supaya order
+    # lama tanpa metode tidak menghalangi migrasi.
+    metode_pembayaran_id = Column(Integer, ForeignKey("payment_methods.id"), nullable=True)
     catatan           = Column(Text, nullable=True)
     total_harga       = Column(Float, nullable=False, default=0.0)
     created_at        = Column(DateTime(timezone=True), server_default=func.now())
@@ -56,6 +53,7 @@ class CustomerOrder(Base):
     # Relasi yang sudah ada
     customer        = relationship("Customer", back_populates="orders")
     dining_table    = relationship("DiningTable")
+    metode          = relationship("PaymentMethod")
     merchant_orders = relationship("MerchantOrder", back_populates="customer_order",
                                    cascade="all, delete-orphan")
 
@@ -68,6 +66,11 @@ class CustomerOrder(Base):
                             cascade="all, delete-orphan")
 
     # ── Property turunan ─────────────────────────────────────────────────────
+
+    @property
+    def metode_pembayaran(self):
+        """Nama metode (string) demi kompatibilitas serialisasi/tampilan lama."""
+        return self.metode.nama_metode if self.metode else None
 
     @property
     def no_meja(self):

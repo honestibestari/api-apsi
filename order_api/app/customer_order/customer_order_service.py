@@ -7,6 +7,7 @@ from app.customer.customer_model import Customer
 from app.customer_order.customer_order_model import CustomerOrder, CustomerOrderStatus
 from app.customer_order.customer_order_schema import CustomerOrderCreate
 from app.dining_table.dining_table_model import DiningTable
+from app.payment_method.payment_method_model import PaymentMethod
 from app.merchant_order.merchant_order_model import (
     MerchantOrder,
     MerchantOrderStatus,
@@ -26,6 +27,7 @@ def _load_customer_order(db: Session, order_id: int) -> CustomerOrder:
         .options(
             joinedload(CustomerOrder.customer),
             joinedload(CustomerOrder.dining_table),
+            joinedload(CustomerOrder.metode),
             joinedload(CustomerOrder.merchant_orders)
                 .joinedload(MerchantOrder.merchant),
             joinedload(CustomerOrder.merchant_orders)
@@ -167,14 +169,25 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
         if not table:
             raise HTTPException(status_code=404, detail="Meja tidak ditemukan")
 
+    # 2b. Validasi metode pembayaran: harus ada & aktif.
+    metode = (
+        db.query(PaymentMethod)
+        .filter(PaymentMethod.id == data.metode_pembayaran_id)
+        .first()
+    )
+    if not metode:
+        raise HTTPException(status_code=404, detail="Metode pembayaran tidak ditemukan")
+    if not metode.is_active:
+        raise HTTPException(status_code=400, detail=f"Metode '{metode.nama_metode}' sedang tidak aktif")
+
     # 3. Buat CustomerOrder
     customer_order = CustomerOrder(
-        customer_id       = customer.id,
-        dining_table_id   = table.id if table else None,
-        tipe_order        = data.tipe_order,
-        metode_pembayaran = data.metode_pembayaran,
-        catatan           = data.catatan,
-        status            = CustomerOrderStatus.VERIFYING,
+        customer_id          = customer.id,
+        dining_table_id      = table.id if table else None,
+        tipe_order           = data.tipe_order,
+        metode_pembayaran_id = metode.id,
+        catatan              = data.catatan,
+        status               = CustomerOrderStatus.VERIFYING,
     )
     db.add(customer_order)
     db.flush()  # agar order_code ter-generate

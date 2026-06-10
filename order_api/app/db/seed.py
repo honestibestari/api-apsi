@@ -7,7 +7,24 @@ from app.admin.admin_model import Admin
 from app.product.product_model import Product
 from app.banner.banner_model import Banner
 from app.category.category_model import Category
+from app.payment_method.payment_method_model import PaymentMethod
 from app.core.auth import hash_password
+
+
+def seed_payment_methods(db):
+    """Tanam metode pembayaran awal (idempotent — skip jika sudah ada)."""
+    if db.query(PaymentMethod).count() > 0:
+        return
+    methods = [
+        PaymentMethod(nama_metode="QRIS", fee="0.7%", is_active=True),
+        PaymentMethod(nama_metode="Tunai", fee="0%", is_active=True),
+        PaymentMethod(nama_metode="Transfer Bank", fee="Rp 2.500", is_active=True),
+        PaymentMethod(nama_metode="GoPay", fee="2%", is_active=True),
+        PaymentMethod(nama_metode="OVO", fee="2%", is_active=True),
+    ]
+    db.add_all(methods)
+    db.commit()
+    print(f"[OK] {len(methods)} metode pembayaran ditambahkan")
 
 
 def seed_global_categories(db):
@@ -49,7 +66,7 @@ def seed_banners(db):
 def seed_orders(db):
     from app.customer.customer_model import Customer
     from app.customer_order.customer_order_model import (
-        CustomerOrder, CustomerOrderStatus, MetodePembayaran, TipeOrder,
+        CustomerOrder, CustomerOrderStatus, TipeOrder,
     )
     from app.merchant_order.merchant_order_model import (
         MerchantOrder, MerchantOrderStatus, Notification, NotifikasiTipe, OrderItem,
@@ -61,6 +78,10 @@ def seed_orders(db):
     tables = db.query(DiningTable).all()
     if not tables:
         return
+
+    # Metode default untuk order dummy: QRIS (pakai FK ke payment_methods).
+    qris = db.query(PaymentMethod).filter(PaymentMethod.nama_metode == "QRIS").first()
+    qris_id = qris.id if qris else None
 
     def merchant_by_nama(nama):
         return db.query(Merchant).filter(Merchant.nama == nama).first()
@@ -75,7 +96,7 @@ def seed_orders(db):
             customer_id=customer.id,
             dining_table_id=table.id if table else None,
             tipe_order=TipeOrder.DINE_IN,
-            metode_pembayaran=MetodePembayaran.QRIS,
+            metode_pembayaran_id=qris_id,
             status=status,
         )
         db.add(co)
@@ -197,6 +218,7 @@ def seed_data():
     seed_admin(db)
     seed_banners(db)
     seed_global_categories(db)
+    seed_payment_methods(db)
 
     merchants_exist = db.query(Merchant).count() > 0
     dining_tables_exist = db.query(DiningTable).count() > 0

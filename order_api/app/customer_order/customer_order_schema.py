@@ -5,10 +5,15 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from app.customer_order.customer_order_model import (
     CustomerOrderStatus,
-    MetodePembayaran,
     TipeOrder,
 )
 from app.merchant_order.merchant_order_model import MerchantOrderStatus
+
+
+class PaymentMethodInfo(BaseModel):
+    id:          int
+    nama_metode: str
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ── Input ──────────────────────────────────────────────────────────────────────
@@ -41,12 +46,12 @@ class ItemCreate(BaseModel):
 
 
 class CustomerOrderCreate(BaseModel):
-    customer:          CustomerInfo
-    dining_table_code: Optional[str]   = None
-    tipe_order:        TipeOrder        = TipeOrder.DINE_IN
-    metode_pembayaran: MetodePembayaran = MetodePembayaran.QRIS
-    catatan:           Optional[str]   = None
-    items:             List[ItemCreate]
+    customer:             CustomerInfo
+    dining_table_code:    Optional[str] = None
+    tipe_order:           TipeOrder     = TipeOrder.DINE_IN
+    metode_pembayaran_id: int
+    catatan:              Optional[str] = None
+    items:                List[ItemCreate]
 
     @field_validator("items")
     @classmethod
@@ -107,12 +112,14 @@ class MerchantOrderNested(BaseModel):
 
 
 class CustomerOrderOut(BaseModel):
-    id:                int
-    order_code:        str
-    status:            CustomerOrderStatus
-    tipe_order:        TipeOrder
-    metode_pembayaran: MetodePembayaran
-    catatan:           Optional[str] = None
+    id:                   int
+    order_code:           str
+    status:               CustomerOrderStatus
+    tipe_order:           TipeOrder
+    metode_pembayaran_id: Optional[int] = None
+    metode:               Optional[PaymentMethodInfo] = None
+    metode_pembayaran:    Optional[str] = None   # alias nama metode (kompat tampilan lama)
+    catatan:              Optional[str] = None
     total_harga:       float
     no_meja:           Optional[str] = None
     tenant_count:      int
@@ -125,11 +132,13 @@ class CustomerOrderOut(BaseModel):
 
 
 class CustomerOrderSummary(BaseModel):
-    id:                int
-    order_code:        str
-    status:            CustomerOrderStatus
-    metode_pembayaran: MetodePembayaran
-    total_harga:       float
+    id:                   int
+    order_code:           str
+    status:               CustomerOrderStatus
+    metode_pembayaran_id: Optional[int] = None
+    metode:               Optional[PaymentMethodInfo] = None
+    metode_pembayaran:    Optional[str] = None   # alias nama metode (kompat tampilan lama)
+    total_harga:          float
     tenant_count:      int
     no_meja:           Optional[str] = None
     customer_id:       Optional[int] = None

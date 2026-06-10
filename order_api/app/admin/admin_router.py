@@ -180,6 +180,7 @@ def dashboard(
         db.query(CustomerOrder)
         .options(
             joinedload(CustomerOrder.customer),
+            joinedload(CustomerOrder.metode),
             joinedload(CustomerOrder.merchant_orders).joinedload(MerchantOrder.merchant),
         )
         .order_by(CustomerOrder.created_at.desc())
@@ -195,7 +196,7 @@ def dashboard(
             "customer":       o.customer_nama or "-",
             "amount":         float(o.total_harga or 0.0),
             "status":         getattr(o.status, "value", o.status),
-            "payment_method": getattr(o.metode_pembayaran, "value", o.metode_pembayaran),
+            "payment_method": o.metode_pembayaran or "-",
             "created_at":     o.created_at.isoformat() if o.created_at else None,
         }
         for o in recent
