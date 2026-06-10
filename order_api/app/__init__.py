@@ -19,8 +19,9 @@ from app.review.review_model import Review
 from app.admin.admin_model import Admin
 from app.category.category_model import Category                             
 from app.payment_method.payment_method_model import PaymentMethod             
-from app.payment.payment_model import Payment                                
+from app.payment.payment_model import Payment
 from app.refund.refund_model import Refund
+from app.banner.banner_model import Banner
 
 # (2) Resolve forward reference: ProductDetail.merchant -> MerchantSummary.
 from app.merchant.merchant_schema import MerchantSummary

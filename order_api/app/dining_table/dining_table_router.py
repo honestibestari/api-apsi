@@ -1,15 +1,62 @@
 import base64
 import json
+from typing import List
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.core.auth import require_admin
 from app.core.config import settings
 from app.core.database import get_db
 from app.dining_table import dining_table_service
+from app.dining_table.dining_table_schema import (
+    DiningTableCreate,
+    DiningTableOut,
+    DiningTableUpdate,
+)
 
 router = APIRouter(prefix="/dining-tables", tags=["Dining Tables"])
+
+
+# ── CRUD admin ──────────────────────────────────────────────────────────────
+
+@router.get("", response_model=List[DiningTableOut], summary="List semua meja (admin)")
+def list_dining_tables(
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    return dining_table_service.list_tables(db)
+
+
+@router.post("", response_model=DiningTableOut, status_code=status.HTTP_201_CREATED,
+             summary="Tambah meja (admin)")
+def create_dining_table(
+    data: DiningTableCreate,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    return dining_table_service.create_table(db, data)
+
+
+@router.patch("/{table_id}", response_model=DiningTableOut,
+              summary="Update meja — rename / toggle aktif (admin)")
+def update_dining_table(
+    table_id: int,
+    data: DiningTableUpdate,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    return dining_table_service.update_table(db, table_id, data)
+
+
+@router.delete("/{table_id}", summary="Hapus meja (admin)")
+def delete_dining_table(
+    table_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    return dining_table_service.delete_table(db, table_id)
 
 
 def _encode_payload(code: str, label: str) -> str:

@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.auth import require_admin
 from app.core.database import get_db
+from app.category.category_model import Category
 from app.customer_order.customer_order_model import CustomerOrder, CustomerOrderStatus
 from app.merchant.merchant_model import Merchant, MerchantStatus
+from app.product.product_model import Product
 from app.merchant_order.merchant_order_model import MerchantOrder, MerchantOrderStatus
 from app.customer.customer_model import Customer
 from app.withdrawal.withdrawal_model import Withdrawal, WithdrawalStatus
@@ -271,6 +273,45 @@ def list_customers(
             Customer.phone.ilike(like)
         )
     return query.offset(offset).limit(limit).all()
+
+
+# ── Pantau kategori produk (lintas merchant) ──────────────────────────────────
+
+@router.get("/categories", summary="List semua kategori produk lintas merchant")
+def list_all_categories(
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    """Overview read-only untuk halaman Pengaturan Sistem.
+
+    Kategori produk dimiliki tiap merchant (CRUD-nya ada di panel merchant).
+    Admin hanya memantau: kategori apa saja yang ada, milik tenant mana, dan
+    berapa produk yang memakainya.
+    """
+    rows = (
+        db.query(
+            Category.id,
+            Category.nama_kategori,
+            Category.id_tenant,
+            Merchant.nama.label("merchant_nama"),
+            func.count(Product.id).label("jumlah_produk"),
+        )
+        .join(Merchant, Merchant.id == Category.id_tenant)
+        .outerjoin(Product, Product.category_id == Category.id)
+        .group_by(Category.id, Category.nama_kategori, Category.id_tenant, Merchant.nama)
+        .order_by(Merchant.nama, Category.nama_kategori)
+        .all()
+    )
+    return [
+        {
+            "id":            r.id,
+            "nama_kategori": r.nama_kategori,
+            "id_tenant":     r.id_tenant,
+            "merchant_nama": r.merchant_nama,
+            "jumlah_produk": r.jumlah_produk,
+        }
+        for r in rows
+    ]
 
 
 # ── Pantau semua order ────────────────────────────────────────────────────────

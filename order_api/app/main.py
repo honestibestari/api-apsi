@@ -20,6 +20,7 @@ from app.category.category_router           import router as category_router
 from app.payment.payment_router             import router as payment_router
 from app.payment_method.payment_method_router import router as payment_method_router
 from app.refund.refund_router               import router as refund_router
+from app.banner.banner_router               import router as banner_router
 
 # Model diregistrasi di app/__init__.py saat package load.
 # 0) Jika RESET_DB=true: drop semua tabel + enum (sekali, untuk bereskan drift).
@@ -69,6 +70,7 @@ app.include_router(category_router)
 app.include_router(payment_router)
 app.include_router(payment_method_router)
 app.include_router(refund_router)
+app.include_router(banner_router)
 
 
 @app.get("/", tags=["Root"])

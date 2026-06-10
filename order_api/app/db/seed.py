@@ -5,7 +5,34 @@ from app.user.user_model import User
 from app.user.user_model import UserRole
 from app.admin.admin_model import Admin
 from app.product.product_model import Product
+from app.banner.banner_model import Banner
 from app.core.auth import hash_password
+
+
+def seed_banners(db):
+    """Tanam banner promo awal (idempotent — skip jika sudah ada)."""
+    if db.query(Banner).count() > 0:
+        return
+    banners = [
+        Banner(
+            title="ES MANGGA\nSAGO", subtitle="Segar, manis, dan menyegarkan. Tersedia di Teras LA!",
+            badge="Minuman Baru!", bg="linear-gradient(135deg, #1a3325 0%, #2d5a3d 50%, #1a3325 100%)",
+            accent_color="#C8961A", sort_order=1,
+        ),
+        Banner(
+            title="SEBLAK\nKOMPLIT", subtitle="Pedas, gurih, bikin nagih. Diskon 15% hari ini!",
+            badge="Promo Spesial!", bg="linear-gradient(135deg, #3b1a1a 0%, #7f1d1d 50%, #3b1a1a 100%)",
+            accent_color="#f59e0b", sort_order=2,
+        ),
+        Banner(
+            title="NASI GORENG\nSPESIAL", subtitle="Menu andalan Kantin Ea Ea yang selalu habis!",
+            badge="Favorit Pelanggan!", bg="linear-gradient(135deg, #1a2a1a 0%, #2d4a2d 50%, #1a2a1a 100%)",
+            accent_color="#eab308", sort_order=3,
+        ),
+    ]
+    db.add_all(banners)
+    db.commit()
+    print(f"[OK] {len(banners)} banner ditambahkan")
 
 
 def seed_orders(db):
@@ -156,7 +183,8 @@ def seed_orders(db):
 def seed_data():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
-    seed_admin(db) 
+    seed_admin(db)
+    seed_banners(db)
 
     merchants_exist = db.query(Merchant).count() > 0
     dining_tables_exist = db.query(DiningTable).count() > 0
