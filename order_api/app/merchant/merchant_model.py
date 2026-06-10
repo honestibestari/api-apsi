@@ -41,10 +41,6 @@ class Merchant(Base):
     reviews         = relationship("Review", back_populates="merchant",
                                    cascade="all, delete-orphan")
 
-    # ← TAMBAH: relasi ke Category (TENANT → KATEGORI 1:N)
-    categories      = relationship("Category", back_populates="tenant",
-                                   cascade="all, delete-orphan")
-
     # ── Property kalkulasi ────────────────────────────────────────────────────
 
     @property

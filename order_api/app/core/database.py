@@ -56,6 +56,30 @@ def reset_schema():
                 print(f"[reset_schema] dropped enum type {enum_name}")
 
 
+def apply_manual_migrations():
+    """Migrasi non-additive yang tidak bisa ditangani sync_columns().
+
+    sync_columns() hanya menambah kolom; ia tidak bisa mengubah nullability.
+    Di sini kita jalankan ALTER eksplisit yang aman & idempotent.
+    """
+    if engine.dialect.name != "postgresql":
+        return
+
+    inspector = inspect(engine)
+    if "categories" not in inspector.get_table_names():
+        return
+
+    # Kategori kini GLOBAL → kolom id_tenant tidak dipakai lagi. DROP COLUMN juga
+    # otomatis membuang FK constraint-nya. IF EXISTS membuatnya idempotent.
+    existing_cols = {c["name"] for c in inspector.get_columns("categories")}
+    if "id_tenant" in existing_cols:
+        with engine.begin() as conn:
+            conn.execute(
+                text('ALTER TABLE categories DROP COLUMN IF EXISTS id_tenant')
+            )
+            print("[migrate] dropped categories.id_tenant (kategori global)")
+
+
 def sync_columns():
     """Auto-migrasi ringan tanpa alembic.
 

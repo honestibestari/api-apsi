@@ -6,7 +6,18 @@ from app.user.user_model import UserRole
 from app.admin.admin_model import Admin
 from app.product.product_model import Product
 from app.banner.banner_model import Banner
+from app.category.category_model import Category
 from app.core.auth import hash_password
+
+
+def seed_global_categories(db):
+    """Tanam kategori produk global awal (idempotent — skip jika sudah ada)."""
+    if db.query(Category).count() > 0:
+        return
+    nama_list = ["Makanan", "Minuman", "Camilan", "Dessert"]
+    db.add_all([Category(nama_kategori=n) for n in nama_list])
+    db.commit()
+    print(f"[OK] {len(nama_list)} kategori global ditambahkan")
 
 
 def seed_banners(db):
@@ -185,6 +196,7 @@ def seed_data():
     db = SessionLocal()
     seed_admin(db)
     seed_banners(db)
+    seed_global_categories(db)
 
     merchants_exist = db.query(Merchant).count() > 0
     dining_tables_exist = db.query(DiningTable).count() > 0

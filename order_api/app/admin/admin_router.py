@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
@@ -275,43 +276,104 @@ def list_customers(
     return query.offset(offset).limit(limit).all()
 
 
-# ── Pantau kategori produk (lintas merchant) ──────────────────────────────────
+# ── Kelola kategori produk GLOBAL ─────────────────────────────────────────────
 
-@router.get("/categories", summary="List semua kategori produk lintas merchant")
+class CategoryIn(BaseModel):
+    nama_kategori: str
+
+
+def _category_with_count(db: Session, cat: Category) -> dict:
+    jumlah = (
+        db.query(func.count(Product.id))
+        .filter(Product.category_id == cat.id)
+        .scalar()
+    )
+    return {"id": cat.id, "nama_kategori": cat.nama_kategori, "jumlah_produk": jumlah or 0}
+
+
+@router.get("/categories", summary="List kategori produk global + jumlah produk")
 def list_all_categories(
     db: Session = Depends(get_db),
     _: None = Depends(require_admin),
 ):
-    """Overview read-only untuk halaman Pengaturan Sistem.
-
-    Kategori produk dimiliki tiap merchant (CRUD-nya ada di panel merchant).
-    Admin hanya memantau: kategori apa saja yang ada, milik tenant mana, dan
-    berapa produk yang memakainya.
-    """
     rows = (
         db.query(
             Category.id,
             Category.nama_kategori,
-            Category.id_tenant,
-            Merchant.nama.label("merchant_nama"),
             func.count(Product.id).label("jumlah_produk"),
         )
-        .join(Merchant, Merchant.id == Category.id_tenant)
         .outerjoin(Product, Product.category_id == Category.id)
-        .group_by(Category.id, Category.nama_kategori, Category.id_tenant, Merchant.nama)
-        .order_by(Merchant.nama, Category.nama_kategori)
+        .group_by(Category.id, Category.nama_kategori)
+        .order_by(Category.nama_kategori)
         .all()
     )
     return [
-        {
-            "id":            r.id,
-            "nama_kategori": r.nama_kategori,
-            "id_tenant":     r.id_tenant,
-            "merchant_nama": r.merchant_nama,
-            "jumlah_produk": r.jumlah_produk,
-        }
+        {"id": r.id, "nama_kategori": r.nama_kategori, "jumlah_produk": r.jumlah_produk}
         for r in rows
     ]
+
+
+@router.post("/categories", status_code=status.HTTP_201_CREATED,
+             summary="Tambah kategori produk global")
+def create_category(
+    data: CategoryIn,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    nama = data.nama_kategori.strip()
+    if not nama:
+        raise HTTPException(422, "Nama kategori tidak boleh kosong")
+    if db.query(Category).filter(Category.nama_kategori == nama).first():
+        raise HTTPException(409, f"Kategori '{nama}' sudah ada")
+    cat = Category(nama_kategori=nama)
+    db.add(cat)
+    db.commit()
+    db.refresh(cat)
+    return _category_with_count(db, cat)
+
+
+@router.put("/categories/{category_id}", summary="Ubah nama kategori produk global")
+def update_category(
+    category_id: int,
+    data: CategoryIn,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    cat = db.query(Category).filter(Category.id == category_id).first()
+    if not cat:
+        raise HTTPException(404, "Kategori tidak ditemukan")
+    nama = data.nama_kategori.strip()
+    if not nama:
+        raise HTTPException(422, "Nama kategori tidak boleh kosong")
+    bentrok = db.query(Category).filter(
+        Category.nama_kategori == nama,
+        Category.id != category_id,
+    ).first()
+    if bentrok:
+        raise HTTPException(409, f"Kategori '{nama}' sudah ada")
+    cat.nama_kategori = nama
+    db.commit()
+    db.refresh(cat)
+    return _category_with_count(db, cat)
+
+
+@router.delete("/categories/{category_id}", summary="Hapus kategori produk global")
+def delete_category(
+    category_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    cat = db.query(Category).filter(Category.id == category_id).first()
+    if not cat:
+        raise HTTPException(404, "Kategori tidak ditemukan")
+    # Lepaskan kategori dari produk yang memakainya (jadi tanpa kategori), lalu hapus.
+    db.query(Product).filter(Product.category_id == category_id).update(
+        {Product.category_id: None}, synchronize_session=False
+    )
+    nama = cat.nama_kategori
+    db.delete(cat)
+    db.commit()
+    return {"message": f"Kategori '{nama}' berhasil dihapus", "id": category_id}
 
 
 # ── Pantau semua order ────────────────────────────────────────────────────────

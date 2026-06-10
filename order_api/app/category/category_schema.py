@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Optional
 from pydantic import BaseModel, ConfigDict, field_validator
 
 
@@ -21,5 +21,4 @@ class CategoryUpdate(BaseModel):
 class CategoryOut(BaseModel):
     id:            int
     nama_kategori: str
-    id_tenant:     int
     model_config = ConfigDict(from_attributes=True)

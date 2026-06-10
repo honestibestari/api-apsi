@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
 
 from app.core.config import settings
-from app.core.database import Base, engine, sync_columns, reset_schema
+from app.core.database import Base, engine, sync_columns, reset_schema, apply_manual_migrations
 from app.db.seed import seed_data
 from app.dining_table.dining_table_router import router as dining_table_router
 from app.merchant.merchant_router import router as merchant_router
@@ -31,6 +31,7 @@ if settings.reset_db:
     reset_schema()
 Base.metadata.create_all(bind=engine)
 sync_columns()
+apply_manual_migrations()
 seed_data()
 
 app = FastAPI(
