@@ -61,6 +61,7 @@ class ProductSummary(BaseModel):
     merchant_id: int
     category_id: Optional[int]      = None   
     category:    Optional[CategoryInfo] = None  
+    foto: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 

@@ -19,6 +19,7 @@ class Merchant(Base):
     id            = Column(Integer, primary_key=True, index=True)
     user_id       = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
     password_hash = Column(String, nullable=False)
+    foto          = Column(String(500), nullable=True)
     nama          = Column(String, nullable=False, index=True)
     deskripsi     = Column(String, nullable=True)
     alamat        = Column(String, nullable=True)

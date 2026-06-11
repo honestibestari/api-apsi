@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # Default: SQLite lokal di folder order_api.
     database_url: str
 
+    # ─── Vercel Blob ─────────────────────────────────────────
+    blob_read_write_token: str = ""
+
     # Jika true, DROP semua tabel + tipe enum lalu bangun ulang dari model saat
     # startup. HANYA untuk dev — SEMUA DATA HILANG. Set sekali untuk membereskan
     # drift skema, lalu kembalikan ke false.

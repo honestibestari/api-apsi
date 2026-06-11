@@ -69,6 +69,7 @@ class MerchantSummary(BaseModel):
     phone: Optional[str] = None
     block: Optional[str] = None
     category: Optional[str] = None
+    foto: Optional[str] = None
     status: MerchantStatus
     rating: float
     total_orders: int
@@ -91,6 +92,7 @@ class MerchantDetail(BaseModel):
     phone: Optional[str] = None
     block: Optional[str] = None
     category: Optional[str] = None
+    foto: Optional[str] = None
     status: MerchantStatus
     rating: float
     total_orders: int

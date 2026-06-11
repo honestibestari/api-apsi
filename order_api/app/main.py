@@ -1,3 +1,6 @@
+import os
+from dotenv import load_dotenv
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
@@ -22,6 +25,10 @@ from app.payment_method.payment_method_router import router as payment_method_ro
 from app.refund.refund_router               import router as refund_router
 from app.banner.banner_router               import router as banner_router
 from app.blob.blob_router import router as blob_router
+
+
+load_dotenv()
+os.environ["BLOB_READ_WRITE_TOKEN"] = settings.blob_read_write_token
 
 # Model diregistrasi di app/__init__.py saat package load.
 # 0) Jika RESET_DB=true: drop semua tabel + enum (sekali, untuk bereskan drift).

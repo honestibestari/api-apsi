@@ -22,6 +22,7 @@ from app.payment_method.payment_method_model import PaymentMethod
 from app.payment.payment_model import Payment
 from app.refund.refund_model import Refund
 from app.banner.banner_model import Banner
+from app.attachment.attachment_model import Attachment 
 
 # (2) Resolve forward reference: ProductDetail.merchant -> MerchantSummary.
 from app.merchant.merchant_schema import MerchantSummary
