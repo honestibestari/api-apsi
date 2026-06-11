@@ -24,7 +24,6 @@ from app.payment.payment_router             import router as payment_router
 from app.payment_method.payment_method_router import router as payment_method_router
 from app.refund.refund_router               import router as refund_router
 from app.banner.banner_router               import router as banner_router
-from app.blob.blob_router import router as blob_router
 
 
 load_dotenv()
@@ -80,7 +79,6 @@ app.include_router(payment_router)
 app.include_router(payment_method_router)
 app.include_router(refund_router)
 app.include_router(banner_router)
-app.include_router(blob_router)
 
 @app.get("/", tags=["Root"])
 def root():
