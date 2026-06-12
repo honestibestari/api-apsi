@@ -9,6 +9,8 @@ class AttachmentOut(BaseModel):
     filename:     str
     content_type: Optional[str] = None
     size:         Optional[int] = None
+    entity_type:  str
+    entity_id:    int
     uploaded_by:  Optional[int] = None
     created_at:   datetime
     model_config = ConfigDict(from_attributes=True)

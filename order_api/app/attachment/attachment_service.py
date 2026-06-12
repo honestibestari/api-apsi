@@ -4,7 +4,7 @@ import vercel_blob
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from app.attachment.attachment_model import Attachment
+from app.attachment.attachment_model import Attachment, EntityType
 from app.merchant.merchant_model import Merchant
 from app.product.product_model import Product
 
@@ -74,6 +74,8 @@ async def upload_product_image(
         filename     = file.filename,
         content_type = file.content_type,
         size         = len(contents),
+        entity_type  = EntityType.PRODUCT.value,
+        entity_id    = product_id,
         uploaded_by  = merchant.id,
     )
     db.add(att)
@@ -105,6 +107,8 @@ async def upload_merchant_logo(
         filename     = file.filename,
         content_type = file.content_type,
         size         = len(contents),
+        entity_type  = EntityType.MERCHANT.value,
+        entity_id    = merchant.id,
         uploaded_by  = merchant.id,
     )
     db.add(att)
@@ -132,6 +136,27 @@ def list_attachments(
     if merchant_id:
         query = query.filter(Attachment.uploaded_by == merchant_id)
     return query.order_by(Attachment.created_at.desc()).all()
+
+
+def list_for_entity(
+    db: Session,
+    entity_type: str,
+    entity_id: int,
+) -> List[Attachment]:
+    """Ambil semua attachment milik satu baris di tabel mana pun.
+
+    Pengganti relationship: karena polymorphic, attachment tidak bisa di-load
+    lewat satu relationship() ke banyak tabel, jadi dilookup manual di sini.
+    """
+    return (
+        db.query(Attachment)
+        .filter(
+            Attachment.entity_type == entity_type,
+            Attachment.entity_id   == entity_id,
+        )
+        .order_by(Attachment.created_at.desc())
+        .all()
+    )
 
 
 # ── UPDATE ────────────────────────────────────────────────────────────────────
