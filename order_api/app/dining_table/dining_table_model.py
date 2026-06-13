@@ -7,8 +7,9 @@ from app.core.database import Base
 
 
 def _generate_code() -> str:
-    # Token acak 8-byte → ~11 char URL-safe (mis. "aB3xK9pQr2_")
-    return secrets.token_urlsafe(8)
+    # Token acak 24-byte → ~32 char URL-safe, opaque & praktis mustahil ditebak.
+    # Inilah nilai yang ditanam di QR; BE me-resolve meja via lookup kolom ini.
+    return secrets.token_urlsafe(24)
 
 
 class DiningTable(Base):

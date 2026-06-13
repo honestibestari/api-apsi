@@ -240,12 +240,14 @@ def seed_data():
 
     if not dining_tables_exist:
         print("Menanam dining table dummy...")
+        # Tanpa `code` eksplisit → memakai default _generate_code() (token acak),
+        # supaya kode QR tidak mudah ditebak.
         dining_tables = [
-            DiningTable(label="T-01", code="meja01demo"),
-            DiningTable(label="T-02", code="meja02demo"),
-            DiningTable(label="T-03", code="meja03demo"),
-            DiningTable(label="T-04", code="meja04demo"),
-            DiningTable(label="T-05", code="meja05demo"),
+            DiningTable(label="T-01"),
+            DiningTable(label="T-02"),
+            DiningTable(label="T-03"),
+            DiningTable(label="T-04"),
+            DiningTable(label="T-05"),
         ]
         db.add_all(dining_tables)
         db.commit()
