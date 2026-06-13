@@ -4,7 +4,6 @@ URL database diambil dari konfigurasi (.env). Secara default memakai SQLite
 lokal, tetapi bisa diganti ke Postgres/MySQL hanya dengan mengubah DATABASE_URL.
 """
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.schema import CreateColumn
 
@@ -39,21 +38,19 @@ def reset_schema():
     hilang. Hanya jalan jika settings.reset_db == True.
     """
     print("[reset_schema] DROP semua tabel & tipe enum (RESET_DB aktif)...")
-    Base.metadata.drop_all(bind=engine)
 
-    # drop_all tidak selalu menghapus tipe ENUM native Postgres. Hapus eksplisit
-    # agar create_all bisa membuat ulang sesuai definisi model terbaru.
+    # Di Postgres, drop_all() hanya mengenal tabel yang terdaftar di model.
+    # Tabel legacy (mis. tenant_balance/tenant_settings/notification_user) yang
+    # tidak ada di model bisa punya FK ke tabel model → DROP TABLE-nya ditolak.
+    # Cara paling bersih untuk reset total: buang seluruh schema `public` berikut
+    # semua dependensinya (tabel legacy + tipe enum native), lalu buat ulang.
     if engine.dialect.name == "postgresql":
-        enum_names = {
-            col.type.name
-            for table in Base.metadata.tables.values()
-            for col in table.columns
-            if isinstance(col.type, SAEnum) and col.type.name
-        }
         with engine.begin() as conn:
-            for enum_name in enum_names:
-                conn.execute(text(f'DROP TYPE IF EXISTS "{enum_name}" CASCADE'))
-                print(f"[reset_schema] dropped enum type {enum_name}")
+            conn.execute(text("DROP SCHEMA public CASCADE"))
+            conn.execute(text("CREATE SCHEMA public"))
+        print("[reset_schema] schema public di-drop & dibuat ulang (CASCADE)")
+    else:
+        Base.metadata.drop_all(bind=engine)
 
 
 def apply_manual_migrations():
@@ -150,7 +147,13 @@ def sync_columns():
                 if column.name in existing_cols:
                     continue
                 col_ddl = CreateColumn(column).compile(dialect=engine.dialect)
-                conn.execute(
-                    text(f'ALTER TABLE "{table.name}" ADD COLUMN {col_ddl}')
-                )
+                ddl = f'ALTER TABLE "{table.name}" ADD COLUMN {col_ddl}'
+                # Tabel yang sudah ada bisa berisi data. `ADD COLUMN ... NOT NULL`
+                # tanpa default akan gagal (NotNullViolation) karena baris lama
+                # belum punya nilai. Untuk kolom wajib tanpa server_default,
+                # tambahkan dulu sebagai NULLABLE; enforcement NOT NULL (+ backfill)
+                # diserahkan ke apply_manual_migrations() bila memang diperlukan.
+                if not column.nullable and column.server_default is None:
+                    ddl = ddl.replace(" NOT NULL", "")
+                conn.execute(text(ddl))
                 print(f"[sync_columns] added {table.name}.{column.name}")
