@@ -58,6 +58,15 @@ def delete_table(db: Session, table_id: int) -> dict:
     return {"message": f"Meja '{label}' berhasil dihapus", "id": table_id}
 
 
+def find_active_by_code(db: Session, code: str):
+    """Cari dining table aktif by kode QR. Return None bila tidak ada (tanpa raise)."""
+    return (
+        db.query(DiningTable)
+        .filter(DiningTable.code == code, DiningTable.is_active.is_(True))
+        .first()
+    )
+
+
 def get_by_code_or_404(db: Session, code: str) -> DiningTable:
     """Ambil dining table aktif berdasarkan kode QR, atau 404."""
     table = (

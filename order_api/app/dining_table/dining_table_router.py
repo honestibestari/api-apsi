@@ -84,13 +84,15 @@ def scan_dining_table(
 
     Alur:
       1. HP scan QR → buka `GET /dining-tables/scan?code=<kode>`
-      2. Backend validasi: dining table ada & aktif (404 jika tidak).
-      3. Encode {code, label} jadi token base64 URL-safe.
-      4. Redirect 302 ke `<FRONTEND_URL>/?t=<token>`.
-      5. FE decode token (atob + JSON.parse) → langsung dapat code & label
-         tanpa hit API kedua.
+      2. Backend cek: dining table ada & aktif.
+      3a. Valid  → encode {code,label} → redirect `<FRONTEND_URL>/?t=<token>`.
+      3b. Invalid/kadaluarsa → TETAP redirect ke FE dengan penanda
+          `<FRONTEND_URL>/?scan=expired` (bukan 404), supaya FE bisa menampilkan
+          pesan ramah + tutorial scan, bukan halaman error mentah.
     """
-    table = dining_table_service.get_by_code_or_404(db, code)
+    base = settings.frontend_url.rstrip("/")
+    table = dining_table_service.find_active_by_code(db, code)
+    if not table:
+        return RedirectResponse(url=f"{base}/?scan=expired", status_code=302)
     token = _encode_payload(table.code, table.label)
-    target = f"{settings.frontend_url.rstrip('/')}/?t={token}"
-    return RedirectResponse(url=target, status_code=302)
+    return RedirectResponse(url=f"{base}/?t={token}", status_code=302)
