@@ -43,6 +43,7 @@ class MerchantOrderOut(BaseModel):
     tipe_order:        Optional[TipeOrder] = None
     no_meja:           Optional[str] = None
     pelanggan_nama:    Optional[str] = None
+    metode_pembayaran: Optional[str] = None
     items:             List[OrderItemOut] = []
     created_at:        datetime
     updated_at:        Optional[datetime] = None
@@ -57,6 +58,7 @@ class MerchantOrderSummary(BaseModel):
     status:         MerchantOrderStatus
     total_harga:    float
     pelanggan_nama: Optional[str] = None
+    metode_pembayaran: Optional[str] = None
     no_meja:        Optional[str] = None
     preview_items:  Optional[str] = None
     created_at:     datetime

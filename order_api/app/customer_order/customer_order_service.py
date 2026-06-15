@@ -249,6 +249,7 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
             customer_order_id = customer_order.id,
             merchant_id       = merchant_id,
             status            = MerchantOrderStatus.BARU,
+            metode_pembayaran = data.metode_pembayaran.value
         )
         db.add(merchant_order)
         db.flush()

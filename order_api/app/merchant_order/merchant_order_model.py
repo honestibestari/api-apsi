@@ -33,19 +33,27 @@ class MerchantOrder(Base):
     order_code        = Column(String(30), unique=True, index=True, nullable=False)
     customer_order_id = Column(Integer, ForeignKey("customer_orders.id"), nullable=False, index=True)
     merchant_id       = Column(Integer, ForeignKey("merchants.id"), nullable=False, index=True)
-    status            = Column(Enum(MerchantOrderStatus, name="merchant_order_status", values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=MerchantOrderStatus.BARU, index=True)
+    status            = Column(Enum(MerchantOrderStatus, name="merchant_order_status",
+                                   values_callable=lambda obj: [e.value for e in obj]),
+                               nullable=False, default=MerchantOrderStatus.BARU, index=True)
     subtotal          = Column(Float, nullable=False, default=0.0)
     biaya_penanganan  = Column(Float, nullable=False, default=0.0)
     total_harga       = Column(Float, nullable=False, default=0.0)
+
+    metode_pembayaran = Column(String(50), nullable=True)
+
     created_at        = Column(DateTime(timezone=True), server_default=func.now())
     updated_at        = Column(DateTime(timezone=True), onupdate=func.now())
 
     customer_order = relationship("CustomerOrder", back_populates="merchant_orders")
     merchant       = relationship("Merchant", back_populates="merchant_orders")
-    items          = relationship("OrderItem", back_populates="merchant_order", cascade="all, delete-orphan")
-    notifikasi     = relationship("Notification", back_populates="merchant_order", cascade="all, delete-orphan")
+    items          = relationship("OrderItem", back_populates="merchant_order",
+                                  cascade="all, delete-orphan")
+    notifikasi     = relationship("Notification", back_populates="merchant_order",
+                                  cascade="all, delete-orphan")
 
-    # ── Field turunan untuk response ──
+    # ── Property turunan untuk response ──────────────────────────────────────
+
     @property
     def merchant_nama(self):
         return self.merchant.nama if self.merchant else None
@@ -64,9 +72,17 @@ class MerchantOrder(Base):
     def tipe_order(self):
         return self.customer_order.tipe_order if self.customer_order else None
 
+
+    @property
+    def metode_pembayaran_display(self):
+        co = self.customer_order
+        return co.metode_pembayaran if co else self.metode_pembayaran
+
     @property
     def preview_items(self):
-        return ", ".join(f"{i.jumlah}x {i.product.nama}" for i in self.items if i.product)
+        return ", ".join(
+            f"{i.jumlah}x {i.product.nama}" for i in self.items if i.product
+        )
 
 
 class OrderItem(Base):
@@ -90,7 +106,9 @@ class Notification(Base):
     id                = Column(Integer, primary_key=True, index=True)
     merchant_id       = Column(Integer, ForeignKey("merchants.id"), nullable=False, index=True)
     merchant_order_id = Column(Integer, ForeignKey("merchant_orders.id"), nullable=True)
-    tipe              = Column(Enum(NotifikasiTipe, name="notifikasi_tipe", values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    tipe              = Column(Enum(NotifikasiTipe, name="notifikasi_tipe",
+                                   values_callable=lambda obj: [e.value for e in obj]),
+                               nullable=False)
     judul             = Column(String(200), nullable=False)
     pesan             = Column(Text, nullable=False)
     is_read           = Column(Boolean, nullable=False, default=False)
