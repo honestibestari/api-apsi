@@ -116,9 +116,7 @@ class CustomerOrderOut(BaseModel):
     order_code:           str
     status:               CustomerOrderStatus
     tipe_order:           TipeOrder
-    metode_pembayaran_id: Optional[int] = None
     metode:               Optional[PaymentMethodInfo] = None
-    metode_pembayaran:    Optional[str] = None   # alias nama metode (kompat tampilan lama)
     catatan:              Optional[str] = None
     total_harga:       float
     no_meja:           Optional[str] = None
@@ -135,9 +133,7 @@ class CustomerOrderSummary(BaseModel):
     id:                   int
     order_code:           str
     status:               CustomerOrderStatus
-    metode_pembayaran_id: Optional[int] = None
     metode:               Optional[PaymentMethodInfo] = None
-    metode_pembayaran:    Optional[str] = None   # alias nama metode (kompat tampilan lama)
     total_harga:          float
     tenant_count:      int
     no_meja:           Optional[str] = None
