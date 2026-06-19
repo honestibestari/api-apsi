@@ -23,6 +23,8 @@ class NotifikasiTipe(str, enum.Enum):
     STATUS_BERUBAH   = "status_berubah"
     ORDER_DIBATALKAN = "order_dibatalkan"
     ORDER_SELESAI    = "order_selesai"
+    PENCAIRAN        = "pencairan"  
+    ULASAN           = "ulasan"
 
 
 class MerchantOrder(Base):

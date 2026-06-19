@@ -1,10 +1,38 @@
 from typing import List, Optional
+
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.merchant_order.merchant_order_model import Notification, NotifikasiTipe
 from app.review.review_model import Review
 from app.review.review_schema import ReviewCreate
 
+
+# ── Helper notifikasi ─────────────────────────────────────────────────────────
+
+def _kirim_notif_ulasan(
+    db: Session,
+    merchant_id: int,
+    pelanggan: str,
+    rating: int,
+    komentar: Optional[str],
+) -> None:
+    bintang = "⭐" * rating
+    pesan   = f"{pelanggan} memberi ulasan {bintang}"
+    if komentar:
+        pesan += f': "{komentar}"'
+
+    notif = Notification(
+        merchant_id       = merchant_id,
+        merchant_order_id = None,
+        tipe              = NotifikasiTipe.ULASAN,
+        judul             = "Ulasan Baru Masuk",
+        pesan             = pesan,
+    )
+    db.add(notif)
+
+
+# ── CRUD ──────────────────────────────────────────────────────────────────────
 
 def list_reviews(
     db: Session,
@@ -27,6 +55,16 @@ def create_review(db: Session, data: ReviewCreate) -> Review:
         komentar    = data.komentar,
     )
     db.add(review)
+
+    # Notifikasi ke merchant
+    _kirim_notif_ulasan(
+        db,
+        merchant_id = data.merchant_id,
+        pelanggan   = data.pelanggan or "Pelanggan",
+        rating      = data.rating,
+        komentar    = data.komentar,
+    )
+
     db.commit()
     db.refresh(review)
     return review

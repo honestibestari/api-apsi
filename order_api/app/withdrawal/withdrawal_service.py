@@ -6,9 +6,30 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.merchant.merchant_model import Merchant
+from app.merchant_order.merchant_order_model import Notification, NotifikasiTipe
 from app.withdrawal.withdrawal_model import Withdrawal, WithdrawalStatus
 from app.withdrawal.withdrawal_schema import WithdrawalSummary, WithdrawalStatusSummary
 
+
+# ── Helper notifikasi ─────────────────────────────────────────────────────────
+
+def _kirim_notif_pencairan(
+    db: Session,
+    merchant_id: int,
+    judul: str,
+    pesan: str,
+) -> None:
+    notif = Notification(
+        merchant_id       = merchant_id,
+        merchant_order_id = None,
+        tipe              = NotifikasiTipe.PENCAIRAN,
+        judul             = judul,
+        pesan             = pesan,
+    )
+    db.add(notif)
+
+
+# ── CRUD ──────────────────────────────────────────────────────────────────────
 
 def list_withdrawals(
     db: Session,
@@ -51,7 +72,6 @@ def get_summary(db: Session) -> WithdrawalSummary:
 
 
 def _available_balance(merchant: Merchant) -> float:
-    """Saldo setelah dikurangi withdrawal APPROVED dan PENDING."""
     locked = sum(
         w.amount
         for w in merchant.withdrawals
@@ -89,6 +109,15 @@ def create_withdrawal(db: Session, merchant_id: int, data) -> Withdrawal:
         account_name   = data.account_name,
     )
     db.add(w)
+
+    # Notifikasi: pengajuan pencairan berhasil
+    _kirim_notif_pencairan(
+        db,
+        merchant_id = merchant_id,
+        judul       = "Pengajuan Pencairan Dikirim",
+        pesan       = f"Pengajuan pencairan sebesar Rp {data.amount:,.0f} sedang diproses admin.",
+    )
+
     db.commit()
     db.refresh(w)
     return w
@@ -110,8 +139,7 @@ def approve_withdrawal(
     if w.status != WithdrawalStatus.PENDING:
         raise HTTPException(400, f"Withdrawal sudah berstatus '{w.status}'")
 
-    # Validasi ulang saldo saat approve (saldo bisa berubah sejak diajukan)
-    available = _available_balance(w.merchant) + w.amount  # keluarkan pending ini sendiri
+    available = _available_balance(w.merchant) + w.amount
     if w.amount > available:
         raise HTTPException(
             400,
@@ -122,6 +150,15 @@ def approve_withdrawal(
     w.processed_at = datetime.now()
     w.processed_by = processed_by
     w.note         = "Disetujui oleh admin"
+
+    # Notifikasi: pencairan disetujui
+    _kirim_notif_pencairan(
+        db,
+        merchant_id = w.merchant_id,
+        judul       = "Pencairan Disetujui ✓",
+        pesan       = f"Pencairan sebesar Rp {w.amount:,.0f} telah disetujui dan sedang diproses ke rekening Anda.",
+    )
+
     db.commit()
     db.refresh(w)
     return w
@@ -143,10 +180,20 @@ def reject_withdrawal(
         raise HTTPException(404, "Withdrawal tidak ditemukan")
     if w.status != WithdrawalStatus.PENDING:
         raise HTTPException(400, f"Withdrawal sudah berstatus '{w.status}'")
+
     w.status       = WithdrawalStatus.REJECTED
     w.processed_at = datetime.now()
     w.processed_by = processed_by
     w.note         = note or "Ditolak oleh admin"
+
+    # Notifikasi: pencairan ditolak
+    _kirim_notif_pencairan(
+        db,
+        merchant_id = w.merchant_id,
+        judul       = "Pencairan Ditolak",
+        pesan       = f"Pencairan sebesar Rp {w.amount:,.0f} ditolak. Alasan: {w.note}",
+    )
+
     db.commit()
     db.refresh(w)
     return w
