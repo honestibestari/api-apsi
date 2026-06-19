@@ -75,7 +75,7 @@ def _available_balance(merchant: Merchant) -> float:
     locked = sum(
         w.amount
         for w in merchant.withdrawals
-        if w.status in (WithdrawalStatus.APPROVED, WithdrawalStatus.PENDING)
+        if w.status == WithdrawalStatus.PENDING
     )
     return merchant.balance - locked
 
