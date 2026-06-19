@@ -126,10 +126,9 @@ def create_withdrawal(db: Session, merchant_id: int, data) -> Withdrawal:
 def approve_withdrawal(
     db: Session, withdrawal_id: int, processed_by: Optional[int] = None
 ) -> Withdrawal:
+    # Query withdrawal dulu dengan FOR UPDATE
     w = (
         db.query(Withdrawal)
-        .options(joinedload(Withdrawal.merchant).joinedload(Merchant.withdrawals))
-        .options(joinedload(Withdrawal.merchant).joinedload(Merchant.merchant_orders))
         .filter(Withdrawal.id == withdrawal_id)
         .with_for_update()
         .first()
@@ -139,7 +138,18 @@ def approve_withdrawal(
     if w.status != WithdrawalStatus.PENDING:
         raise HTTPException(400, f"Withdrawal sudah berstatus '{w.status}'")
 
-    available = _available_balance(w.merchant) + w.amount
+    # Query merchant terpisah (tanpa FOR UPDATE)
+    merchant = (
+        db.query(Merchant)
+        .options(
+            joinedload(Merchant.withdrawals),
+            joinedload(Merchant.merchant_orders),
+        )
+        .filter(Merchant.id == w.merchant_id)
+        .first()
+    )
+
+    available = _available_balance(merchant) + w.amount
     if w.amount > available:
         raise HTTPException(
             400,
@@ -151,7 +161,6 @@ def approve_withdrawal(
     w.processed_by = processed_by
     w.note         = "Disetujui oleh admin"
 
-    # Notifikasi: pencairan disetujui
     _kirim_notif_pencairan(
         db,
         merchant_id = w.merchant_id,
