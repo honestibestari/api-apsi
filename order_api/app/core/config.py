@@ -56,6 +56,15 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     email_from_name: str = "Teras LA DineHub"
 
+    # ─── Email (HTTP API — Resend) ───────────────────────
+    # Host cloud (mis. Railway) memblokir port SMTP keluar, jadi pengiriman lewat
+    # SMTP gagal (Network unreachable / timeout). Resend memakai HTTPS:443 yang
+    # tidak diblokir. Bila resend_api_key di-set → pakai Resend; jika kosong →
+    # fallback ke SMTP. resend_from harus pakai domain terverifikasi di Resend,
+    # atau "onboarding@resend.dev" untuk uji coba.
+    resend_api_key: str = ""
+    resend_from: str = "onboarding@resend.dev"
+
     # ─── Pembayaran (mode dummy) ─────────────────────────
     # Selama belum ada gateway asli: pembayaran non-tunai yang masih PENDING akan
     # otomatis dianggap LUNAS setelah sekian detik (disimulasikan saat FE polling

@@ -4,7 +4,10 @@ Kredensial dari settings (ADMIN_EMAIL / ADMIN_EMAIL_PASSWORD). Untuk Gmail,
 gunakan App Password. Pengiriman dilewati diam-diam bila kredensial kosong,
 agar pembuatan order tidak pernah gagal hanya karena email.
 """
+import json
 import smtplib
+import urllib.error
+import urllib.request
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -213,24 +216,66 @@ def build_refund_email_html(order, nominal, refund_url: str) -> str:
 </html>"""
 
 
+def _send_via_resend(to: str, subject: str, html: str) -> None:
+    """Kirim email lewat Resend HTTP API (HTTPS:443). Dipakai di host yang
+    memblokir port SMTP keluar (mis. Railway). Melempar exception bila gagal —
+    ditangani oleh caller send_email()."""
+    payload = json.dumps({
+        "from": f"{settings.email_from_name} <{settings.resend_from}>",
+        "to": [to],
+        "subject": subject,
+        "html": html,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=payload,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {settings.resend_api_key}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            resp.read()
+    except urllib.error.HTTPError as exc:
+        # Sertakan body respons agar penyebab (mis. domain belum terverifikasi) terlihat.
+        detail = exc.read().decode("utf-8", "replace")
+        raise RuntimeError(f"Resend HTTP {exc.code}: {detail}") from exc
+
+
+def _send_via_smtp(to: str, subject: str, html: str) -> None:
+    """Kirim email lewat SMTP. Melempar exception bila gagal."""
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{settings.email_from_name} <{settings.admin_email}>"
+    msg["To"] = to
+    msg.attach(MIMEText(html, "html", "utf-8"))
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as server:
+        server.starttls()
+        server.login(settings.admin_email, settings.admin_email_password)
+        server.sendmail(settings.admin_email, [to], msg.as_string())
+
+
 def send_email(to: str, subject: str, html: str) -> None:
-    """Kirim email HTML via SMTP. Aman dipanggil di background task — error
+    """Kirim email HTML. Memakai Resend (HTTPS) bila RESEND_API_KEY di-set,
+    jika tidak fallback ke SMTP. Aman dipanggil di background task — error
     di-log, tidak dilempar."""
-    if not (settings.admin_email and settings.admin_email_password):
-        print("[email] dilewati: ADMIN_EMAIL / ADMIN_EMAIL_PASSWORD belum diset")
-        return
     if not to:
         return
+
+    if settings.resend_api_key:
+        transport = "resend"
+        sender = _send_via_resend
+    elif settings.admin_email and settings.admin_email_password:
+        transport = "smtp"
+        sender = _send_via_smtp
+    else:
+        print("[email] dilewati: RESEND_API_KEY / ADMIN_EMAIL belum diset")
+        return
+
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{settings.email_from_name} <{settings.admin_email}>"
-        msg["To"] = to
-        msg.attach(MIMEText(html, "html", "utf-8"))
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as server:
-            server.starttls()
-            server.login(settings.admin_email, settings.admin_email_password)
-            server.sendmail(settings.admin_email, [to], msg.as_string())
-        print(f"[email] terkirim ke {to}: {subject}")
+        sender(to, subject, html)
+        print(f"[email] terkirim ke {to} via {transport}: {subject}")
     except Exception as exc:  # noqa: BLE001
-        print(f"[email] gagal kirim ke {to}: {exc}")
+        print(f"[email] gagal kirim ke {to} via {transport}: {exc}")
