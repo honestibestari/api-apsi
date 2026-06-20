@@ -46,6 +46,16 @@ class Settings(BaseSettings):
     # URL frontend yang dituju setelah scan QR dining table.
     frontend_url: str = "http://localhost:3000"
 
+    # ─── Email (SMTP) ────────────────────────────────────
+    # Kredensial pengirim email notifikasi pesanan. Untuk Gmail, admin_email_password
+    # = App Password (bukan password akun). Bila kosong → pengiriman email dilewati
+    # (tidak menghalangi pembuatan order).
+    admin_email: str = ""
+    admin_email_password: str = ""
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    email_from_name: str = "Teras LA DineHub"
+
     # ─── Pembayaran (mode dummy) ─────────────────────────
     # Selama belum ada gateway asli: pembayaran non-tunai yang masih PENDING akan
     # otomatis dianggap LUNAS setelah sekian detik (disimulasikan saat FE polling

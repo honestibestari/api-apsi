@@ -8,6 +8,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
+from app.core import idhash
 from app.core.config import settings
 from app.core.database import Base
 
@@ -85,6 +86,11 @@ class CustomerOrder(Base):
     @property
     def customer_nama(self):
         return self.customer.nama if self.customer else None
+
+    @property
+    def hash(self):
+        """ID opaque ber-signature untuk akses publik (link email, dsb)."""
+        return idhash.encode("customer_order", self.id) if self.id else None
 
     # ── Deadline turunan (untuk warning di FE) ───────────────────────────────
 

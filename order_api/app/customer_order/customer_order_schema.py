@@ -116,6 +116,7 @@ class MerchantOrderNested(BaseModel):
 
 class CustomerOrderOut(BaseModel):
     id:                   int
+    hash:                 Optional[str] = None   # ID opaque untuk akses publik
     order_code:           str
     status:               CustomerOrderStatus
     tipe_order:           TipeOrder

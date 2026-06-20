@@ -47,6 +47,22 @@ def order_by_payment_token(token: str, db: Session = Depends(get_db)):
     return customer_order_service.get_customer_order_or_404(db, payment.id_pesanan)
 
 
+@router.post(
+    "/status/{token}/merchant-orders/{merchant_order_id}/cancel",
+    response_model=CustomerOrderOut,
+    summary="[Customer] Batalkan 1 tenant yang telat diproses (refund parsial)",
+)
+def cancel_overdue_tenant(token: str, merchant_order_id: int, db: Session = Depends(get_db)):
+    """Customer membatalkan satu merchant order yang telat diproses, lewat token
+    pembayaran (bukti kepemilikan struk). Hanya tenant tsb yang dibatalkan; tenant
+    lain pada struk tetap berjalan. Kembalikan struk terbaru.
+    """
+    payment = payment_service.get_payment_by_token_or_404(db, token)
+    return customer_order_service.customer_cancel_merchant_order(
+        db, payment.id_pesanan, merchant_order_id
+    )
+
+
 @router.get("", response_model=List[PaymentOut], summary="List pembayaran")
 def list_payments(
     id_pesanan: Optional[int] = Query(None, description="Filter per pesanan"),

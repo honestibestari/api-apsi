@@ -19,7 +19,6 @@ from app.merchant_order.merchant_order_model import (
 )
 from app.payment.payment_model import Payment, StatusPembayaran
 from app.product.product_model import Product
-from app.refund.refund_model import Refund, StatusRefund
 
 
 # ── Eager load ────────────────────────────────────────────────────────────────
@@ -106,19 +105,18 @@ def _order_is_paid(db: Session, order: CustomerOrder) -> bool:
     )
 
 
-def cancel_merchant_order(
-    db: Session,
-    mo: MerchantOrder,
-    *,
-    create_refund: bool = True,
-) -> None:
+def cancel_merchant_order(db: Session, mo: MerchantOrder) -> None:
     """Batalkan SATU merchant order secara konsisten:
 
     • status → dibatalkan (idempotent),
     • kembalikan stok produk (stok di-reserve saat order dibuat, jadi selalu
       dikembalikan saat dibatalkan),
-    • hitung ulang total struk induk,
-    • catat Refund parsial (status pending) bila order sudah dibayar.
+    • hitung ulang total struk induk.
+
+    Refund TIDAK dibuat di sini. Refund dibentuk saat CUSTOMER ORDER selesai
+    keseluruhan (done/cancelled): bila ada ≥1 merchant order dibatalkan & order
+    sudah dibayar, sweep membuat satu Refund agregat lalu mengirim link pilih
+    metode ke email customer.
 
     Tidak commit — pemanggil yang commit. Tidak membuat notifikasi & tidak
     men-sync status struk (diserahkan ke pemanggil sesuai konteksnya).
@@ -126,7 +124,6 @@ def cancel_merchant_order(
     if mo.status == MerchantOrderStatus.DIBATALKAN:
         return
 
-    refund_amount = mo.total_harga
     mo.status = MerchantOrderStatus.DIBATALKAN
 
     # Stok dikonsumsi saat order dibuat → selalu kembalikan saat dibatalkan.
@@ -139,14 +136,6 @@ def cancel_merchant_order(
         return
 
     _recompute_order_total(order)
-
-    if create_refund and refund_amount > 0 and _order_is_paid(db, order):
-        db.add(Refund(
-            id_pesanan    = order.id,
-            nominal       = refund_amount,
-            metode_refund = order.metode_pembayaran,
-            status        = StatusRefund.PENDING,
-        ))
 
 
 # ── Sinkronisasi status ───────────────────────────────────────────────────────
@@ -411,5 +400,37 @@ def confirm_order(db: Session, order_id: int) -> CustomerOrder:
     if order.status != CustomerOrderStatus.WAITING_CONFIRMATION:
         raise HTTPException(status_code=400, detail="Order belum siap dikonfirmasi")
     order.status = CustomerOrderStatus.DONE
+    db.commit()
+    return _load_customer_order(db, order_id)
+
+
+def customer_cancel_merchant_order(
+    db: Session, order_id: int, merchant_order_id: int
+) -> CustomerOrder:
+    """Pelanggan membatalkan SATU tenant yang telat diproses (refund parsial).
+
+    Hanya berlaku untuk merchant order milik struk ini yang berstatus 'diproses'
+    DAN sudah melewati batas waktu penyiapan (is_prep_overdue). Tenant lain pada
+    struk yang sama TIDAK terpengaruh. Stok dikembalikan, refund parsial dicatat,
+    total struk dihitung ulang, status struk di-sync.
+    """
+    order = _load_customer_order(db, order_id)
+    mo = next((m for m in order.merchant_orders if m.id == merchant_order_id), None)
+    if mo is None:
+        raise HTTPException(404, "Pesanan tenant tidak ditemukan pada struk ini")
+    if mo.status != MerchantOrderStatus.DIPROSES:
+        raise HTTPException(400, "Hanya pesanan tenant yang sedang diproses yang bisa dibatalkan")
+    if not mo.is_prep_overdue:
+        raise HTTPException(400, "Pesanan tenant belum melewati batas waktu — belum bisa dibatalkan")
+
+    cancel_merchant_order(db, mo)  # dibatalkan + stok kembali + refund parsial
+    db.add(Notification(
+        merchant_id       = mo.merchant_id,
+        merchant_order_id = mo.id,
+        tipe              = NotifikasiTipe.ORDER_DIBATALKAN,
+        judul             = "Pesanan dibatalkan pelanggan",
+        pesan             = f"{mo.order_code} dibatalkan pelanggan karena melewati batas waktu penyiapan.",
+    ))
+    sync_customer_order_status(order)
     db.commit()
     return _load_customer_order(db, order_id)

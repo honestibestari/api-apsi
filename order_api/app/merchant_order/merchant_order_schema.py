@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
-from app.customer_order.customer_order_model import TipeOrder
+from app.customer_order.customer_order_model import CustomerOrderStatus, TipeOrder
 from app.merchant_order.merchant_order_model import MerchantOrderStatus, NotifikasiTipe
 
 
@@ -50,6 +50,7 @@ class MerchantOrderOut(BaseModel):
     auto_cancel_at:    Optional[datetime] = None
     prep_deadline_at:  Optional[datetime] = None
     is_prep_overdue:   bool = False
+    customer_order_status: Optional[CustomerOrderStatus] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -68,6 +69,7 @@ class MerchantOrderSummary(BaseModel):
     auto_cancel_at:    Optional[datetime] = None
     prep_deadline_at:  Optional[datetime] = None
     is_prep_overdue:   bool = False
+    customer_order_status: Optional[CustomerOrderStatus] = None
 
     model_config = ConfigDict(from_attributes=True)
 

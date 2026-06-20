@@ -76,6 +76,12 @@ class MerchantOrder(Base):
     def tipe_order(self):
         return self.customer_order.tipe_order if self.customer_order else None
 
+    @property
+    def customer_order_status(self):
+        """Status struk induk — dipakai FE merchant untuk membedakan 'selesai
+        disiapkan' vs 'sudah dikonfirmasi pelanggan' (struk 'done')."""
+        return self.customer_order.status if self.customer_order else None
+
 
     @property
     def metode_pembayaran_display(self):

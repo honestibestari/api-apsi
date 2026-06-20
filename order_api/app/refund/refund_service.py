@@ -6,11 +6,51 @@ from app.refund.refund_model import Refund, StatusRefund
 from app.refund.refund_schema import RefundCreate
 
 
+# Metode refund yang didukung — hanya e-wallet.
+ALLOWED_EWALLETS = ["GoPay", "OVO", "DANA", "ShopeePay"]
+
+
 def get_refund_or_404(db: Session, refund_id: int) -> Refund:
     r = db.query(Refund).filter(Refund.id == refund_id).first()
     if not r:
         raise HTTPException(404, "Refund tidak ditemukan")
     return r
+
+
+def get_refund_by_order(db: Session, order_id: int) -> Optional[Refund]:
+    """Refund terbaru untuk sebuah customer order (atau None)."""
+    return (
+        db.query(Refund)
+        .filter(Refund.id_pesanan == order_id)
+        .order_by(Refund.timestamp.desc())
+        .first()
+    )
+
+
+def process_refund_choice(
+    db: Session, order_id: int, metode_refund: str, nomor_tujuan: str
+) -> Refund:
+    """Customer memilih metode e-wallet → refund langsung diselesaikan.
+
+    Logika pengiriman uang DI-BYPASS (fase dummy): begitu metode dipilih, status
+    langsung DISETUJUI (dianggap selesai).
+    """
+    refund = get_refund_by_order(db, order_id)
+    if not refund:
+        raise HTTPException(404, "Refund untuk pesanan ini tidak ditemukan")
+    if refund.status != StatusRefund.PENDING:
+        raise HTTPException(400, "Refund sudah diproses sebelumnya")
+    if metode_refund not in ALLOWED_EWALLETS:
+        raise HTTPException(400, f"Metode refund harus salah satu e-wallet: {', '.join(ALLOWED_EWALLETS)}")
+    if not (nomor_tujuan or "").strip():
+        raise HTTPException(400, "Nomor tujuan e-wallet wajib diisi")
+
+    refund.metode_refund = metode_refund
+    refund.nomor_tujuan = nomor_tujuan.strip()
+    refund.status = StatusRefund.DISETUJUI  # bypass transfer → langsung selesai
+    db.commit()
+    db.refresh(refund)
+    return refund
 
 
 def list_refunds(db: Session, id_pesanan: Optional[int] = None) -> List[Refund]:

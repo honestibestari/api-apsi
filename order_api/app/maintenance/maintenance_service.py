@@ -11,10 +11,12 @@ via POST /maintenance/sweep (untuk cron eksternal di lingkungan serverless).
 """
 from datetime import datetime, timezone
 
+from sqlalchemy import and_, exists
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.core.email import build_refund_email_html, send_email
 from app.customer_order import customer_order_service as co_svc
 from app.customer_order.customer_order_model import CustomerOrder, CustomerOrderStatus
 from app.merchant_order.merchant_order_model import (
@@ -24,6 +26,7 @@ from app.merchant_order.merchant_order_model import (
     NotifikasiTipe,
     OrderItem,
 )
+from app.refund.refund_model import Refund, StatusRefund
 
 _OVERDUE_JUDUL = "Pesanan terlambat"
 
@@ -67,8 +70,7 @@ def _expire_unpaid_orders(db: Session) -> int:
         if not _is_past(order.created_at, secs):
             continue
         for mo in order.merchant_orders:
-            # Belum dibayar → tanpa refund.
-            co_svc.cancel_merchant_order(db, mo, create_refund=False)
+            co_svc.cancel_merchant_order(db, mo)
         order.status = CustomerOrderStatus.CANCELLED
         n += 1
     return n
@@ -161,6 +163,59 @@ def _flag_overdue_prep(db: Session) -> int:
     return n
 
 
+def _create_completion_refunds(db: Session) -> int:
+    """Buat refund saat CUSTOMER ORDER tuntas (done/cancelled), sudah dibayar, dan
+    ada ≥1 merchant order dibatalkan — tetapi belum punya record Refund. Lalu kirim
+    email berisi link untuk memilih metode refund (e-wallet).
+    """
+    cancelled_exists = exists().where(
+        and_(
+            MerchantOrder.customer_order_id == CustomerOrder.id,
+            MerchantOrder.status == MerchantOrderStatus.DIBATALKAN,
+        )
+    )
+    refund_exists = exists().where(Refund.id_pesanan == CustomerOrder.id)
+
+    orders = (
+        db.query(CustomerOrder)
+        .options(
+            joinedload(CustomerOrder.customer),
+            joinedload(CustomerOrder.merchant_orders),
+        )
+        .filter(
+            CustomerOrder.status.in_(
+                [CustomerOrderStatus.DONE, CustomerOrderStatus.CANCELLED]
+            ),
+            cancelled_exists,
+            ~refund_exists,
+        )
+        .all()
+    )
+
+    n = 0
+    for order in orders:
+        if not co_svc._order_is_paid(db, order):
+            continue
+        refundable = sum(
+            mo.total_harga
+            for mo in order.merchant_orders
+            if mo.status == MerchantOrderStatus.DIBATALKAN
+        )
+        if refundable <= 0:
+            continue
+
+        db.add(Refund(id_pesanan=order.id, nominal=refundable, status=StatusRefund.PENDING))
+        db.flush()
+
+        to = order.customer.email if order.customer else None
+        if to:
+            url = f"{settings.frontend_url.rstrip('/')}/refund/{order.hash}"
+            html = build_refund_email_html(order, refundable, url)
+            send_email(to, f"Refund pesanan {order.order_code} — Teras LA", html)
+        n += 1
+    return n
+
+
 # ── Entry point ─────────────────────────────────────────────────────────────────
 
 def run_maintenance_sweep(db: Session) -> dict:
@@ -170,6 +225,7 @@ def run_maintenance_sweep(db: Session) -> dict:
         "terbuka_cancelled":    _cancel_stale_terbuka(db),
         "auto_confirmed":       _autocomplete_confirmations(db),
         "prep_overdue_flagged": _flag_overdue_prep(db),
+        "completion_refunds":   _create_completion_refunds(db),
     }
     db.commit()
     return result

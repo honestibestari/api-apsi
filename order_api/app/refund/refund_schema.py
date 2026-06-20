@@ -27,3 +27,16 @@ class RefundOut(BaseModel):
     status:        StatusRefund
     timestamp:     datetime
     model_config = ConfigDict(from_attributes=True)
+
+
+class RefundProcess(BaseModel):
+    """Pilihan customer: metode e-wallet + nomor tujuan. Memfinalkan refund."""
+    metode_refund: str
+    nomor_tujuan:  str
+
+    @field_validator("metode_refund", "nomor_tujuan")
+    @classmethod
+    def tidak_kosong(cls, v: str) -> str:
+        if not (v or "").strip():
+            raise ValueError("Wajib diisi")
+        return v.strip()
