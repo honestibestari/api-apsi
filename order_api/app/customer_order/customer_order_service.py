@@ -271,7 +271,9 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
     # 1. Upsert customer
     customer = _upsert_customer(db, data.customer)
 
-    # 2. Validasi meja
+    # 2. Validasi meja — harus ada DAN aktif (selaras dengan endpoint /scan).
+    #    Meja yang dinonaktifkan admin tidak boleh dipakai walau code-nya masih
+    #    tersimpan di sesi customer.
     table = None
     if data.dining_table_code:
         table = (
@@ -281,6 +283,8 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
         )
         if not table:
             raise HTTPException(status_code=404, detail="Meja tidak ditemukan")
+        if not table.is_active:
+            raise HTTPException(status_code=400, detail="Meja sedang tidak aktif")
 
     # 2b. Validasi metode pembayaran: harus ada & aktif.
     metode = (
