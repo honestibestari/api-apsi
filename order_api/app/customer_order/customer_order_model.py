@@ -1,5 +1,6 @@
 import enum
 import random
+from datetime import timedelta
 
 from sqlalchemy import (
     Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text,
@@ -7,6 +8,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
+from app.core.config import settings
 from app.core.database import Base
 
 
@@ -83,3 +85,22 @@ class CustomerOrder(Base):
     @property
     def customer_nama(self):
         return self.customer.nama if self.customer else None
+
+    # ── Deadline turunan (untuk warning di FE) ───────────────────────────────
+
+    @property
+    def pay_deadline_at(self):
+        """Batas akhir customer membayar. Lewat ini → order dibatalkan otomatis."""
+        secs = settings.customer_pay_timeout_seconds
+        if self.status != CustomerOrderStatus.VERIFYING or secs <= 0 or not self.created_at:
+            return None
+        return self.created_at + timedelta(seconds=secs)
+
+    @property
+    def auto_confirm_at(self):
+        """Batas akhir customer konfirmasi. Lewat ini → order dianggap selesai otomatis."""
+        secs = settings.customer_confirm_timeout_seconds
+        if self.status != CustomerOrderStatus.WAITING_CONFIRMATION or secs <= 0:
+            return None
+        ref = self.updated_at or self.created_at
+        return ref + timedelta(seconds=secs) if ref else None

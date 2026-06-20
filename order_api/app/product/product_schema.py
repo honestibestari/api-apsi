@@ -50,7 +50,21 @@ class ProductUpdate(BaseModel):
     foto:        Optional[str]   = None
     harga:       Optional[float] = None
     stok:        Optional[int]   = None
-    category_id: Optional[int]   = None  
+    category_id: Optional[int]   = None
+
+    @field_validator("stok")
+    @classmethod
+    def stok_non_negatif(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v < 0:
+            raise ValueError("Stok tidak boleh negatif")
+        return v
+
+    @field_validator("harga")
+    @classmethod
+    def harga_positif(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and v <= 0:
+            raise ValueError("Harga harus lebih dari 0")
+        return v
 
 
 class ProductSummary(BaseModel):

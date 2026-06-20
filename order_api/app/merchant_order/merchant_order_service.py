@@ -4,7 +4,10 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.customer_order.customer_order_model import CustomerOrder
-from app.customer_order.customer_order_service import sync_customer_order_status
+from app.customer_order.customer_order_service import (
+    cancel_merchant_order,
+    sync_customer_order_status,
+)
 from app.merchant_order.merchant_order_model import (
     MerchantOrder,
     MerchantOrderStatus,
@@ -111,13 +114,12 @@ def update_status(db: Session, order_id: int, data: MerchantOrderStatusUpdate) -
             detail=f"Transisi {order.status.value} → {new_status.value} tidak diizinkan",
         )
 
-    order.status = new_status
-
-    # Kembalikan stok jika dibatalkan
+    # Pembatalan ditangani helper bersama: set status + kembalikan stok +
+    # hitung ulang total struk + catat refund parsial bila sudah dibayar.
     if new_status == MerchantOrderStatus.DIBATALKAN:
-        for item in order.items:
-            if item.product:
-                item.product.stok += item.jumlah
+        cancel_merchant_order(db, order)
+    else:
+        order.status = new_status
 
     # Buat notifikasi
     if new_status == MerchantOrderStatus.DIBATALKAN:

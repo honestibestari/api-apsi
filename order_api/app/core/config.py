@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     # ─── Vercel Blob ─────────────────────────────────────────
     blob_read_write_token: str = ""
 
+    # ─── Penyimpanan attachment lokal (fallback) ─────────────
+    # Bila blob_read_write_token kosong, file diunggah ke disk lokal & dilayani
+    # via /static. static_base_url = origin publik API ini (tanpa trailing slash),
+    # dipakai membentuk URL absolut file lokal agar bisa diakses FE.
+    static_base_url: str = "http://localhost:8000"
+
     # Jika true, DROP semua tabel + tipe enum lalu bangun ulang dari model saat
     # startup. HANYA untuk dev — SEMUA DATA HILANG. Set sekali untuk membereskan
     # drift skema, lalu kembalikan ke false.
@@ -49,6 +55,24 @@ class Settings(BaseSettings):
     # Batas waktu merchant memutuskan (confirm/tolak) sebuah merchant order setelah
     # dibayar. Lewat ambang ini & masih 'terbuka' → otomatis dibatalkan. Set 0 = off.
     merchant_decide_timeout_seconds: int = 600  # 10 menit
+
+    # ─── Timeout siklus order (sweep maintenance) ────────
+    # Order 'verifying' (belum dibayar) lewat ambang ini sejak dibuat → otomatis
+    # dibatalkan & stok dikembalikan. Mencegah order telantar mengunci stok. 0 = off.
+    customer_pay_timeout_seconds: int = 900  # 15 menit
+
+    # Batas wajar merchant menyelesaikan pesanan yang sudah 'diproses'. Lewat ambang
+    # ini → ditandai TERLAMBAT (pengingat ke merchant), TIDAK auto-selesai. 0 = off.
+    merchant_prep_timeout_seconds: int = 1800  # 30 menit
+
+    # Order 'waiting_confirmation' (semua tenant selesai) yang tak dikonfirmasi
+    # customer dalam ambang ini → otomatis dianggap 'done'. 0 = off.
+    customer_confirm_timeout_seconds: int = 86400  # 24 jam
+
+    # Interval sweep maintenance otomatis (detik). Menggerakkan semua timeout di
+    # atas tanpa bergantung pada polling FE. 0 = nonaktifkan scheduler internal
+    # (gunakan endpoint POST /maintenance/sweep via cron eksternal sebagai gantinya).
+    maintenance_sweep_seconds: int = 60
 
     # ─── CORS ────────────────────────────────────────────
     # Daftar origin dipisah koma, mis. "http://localhost:3000,http://localhost:5173"

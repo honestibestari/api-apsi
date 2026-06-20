@@ -1,15 +1,24 @@
+import os
+import re
+from pathlib import Path
 from typing import List, Optional
 
-import vercel_blob
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.attachment.attachment_model import Attachment, EntityType
+from app.core.config import settings
 from app.merchant.merchant_model import Merchant
 from app.product.product_model import Product
 
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_SIZE      = 5 * 1024 * 1024  # 5 MB
+
+# Direktori penyimpanan lokal (fallback bila tidak ada token Vercel Blob).
+# attachment_service.py ada di app/attachment/ → parents[2] = root order_api.
+_BASE_DIR    = Path(__file__).resolve().parents[2]
+UPLOAD_DIR   = _BASE_DIR / "static" / "uploads"
+_LOCAL_MARKER = "/static/uploads/"
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
@@ -21,8 +30,47 @@ def _validate(file: UploadFile, contents: bytes) -> None:
         raise HTTPException(400, "Ukuran file maksimal 5 MB")
 
 
-def _delete_from_vercel(url: str) -> None:
+def _safe_name(filename: str) -> str:
+    """Sanitasi nama file: hanya alnum, titik, strip, garis bawah."""
+    name = os.path.basename(filename or "file")
+    name = re.sub(r"[^A-Za-z0-9._-]", "_", name)
+    return name or "file"
+
+
+def _store_file(path: str, contents: bytes, content_type: str) -> str:
+    """Simpan file & kembalikan URL publik.
+
+    Pakai Vercel Blob bila token tersedia; jika tidak, simpan ke disk lokal
+    (static/uploads) dan layani via /static.
+    """
+    if settings.blob_read_write_token:
+        import vercel_blob  # impor lazy: hanya dibutuhkan bila pakai Vercel Blob
+        response = vercel_blob.put(path, contents, {"access": "public"})
+        return response["url"]
+
+    rel      = path.replace("\\", "/")
+    abs_path = UPLOAD_DIR.joinpath(*rel.split("/"))
+    abs_path.parent.mkdir(parents=True, exist_ok=True)
+    abs_path.write_bytes(contents)
+    base = settings.static_base_url.rstrip("/")
+    return f"{base}{_LOCAL_MARKER}{rel}"
+
+
+def _delete_stored(url: str) -> None:
+    """Hapus file dari Vercel Blob atau disk lokal (best-effort)."""
+    if not url:
+        return
+    if _LOCAL_MARKER in url:
+        try:
+            rel = url.split(_LOCAL_MARKER, 1)[1]
+            abs_path = UPLOAD_DIR.joinpath(*rel.split("/"))
+            if abs_path.exists():
+                abs_path.unlink()
+        except Exception:
+            pass
+        return
     try:
+        import vercel_blob  # impor lazy
         vercel_blob.delete(url)
     except Exception:
         pass
@@ -41,7 +89,7 @@ def _hapus_attachment_lama(db: Session, url: str, merchant_id: int) -> None:
         Attachment.uploaded_by == merchant_id,
     ).first()
     if old:
-        _delete_from_vercel(old.url)
+        _delete_stored(old.url)
         db.delete(old)
 
 
@@ -66,12 +114,13 @@ async def upload_product_image(
     if product.foto:
         _hapus_attachment_lama(db, product.foto, merchant.id)
 
-    path     = f"products/{merchant.id}/{product_id}/{file.filename}"
-    response = vercel_blob.put(path, contents, {"access": "public"})
+    fname = _safe_name(file.filename)
+    path  = f"products/{merchant.id}/{product_id}/{fname}"
+    url   = _store_file(path, contents, file.content_type)
 
     att = Attachment(
-        url          = response["url"],
-        filename     = file.filename,
+        url          = url,
+        filename     = fname,
         content_type = file.content_type,
         size         = len(contents),
         entity_type  = EntityType.PRODUCT.value,
@@ -99,12 +148,13 @@ async def upload_merchant_logo(
     if merchant.foto:
         _hapus_attachment_lama(db, merchant.foto, merchant.id)
 
-    path     = f"merchants/{merchant.id}/logo/{file.filename}"
-    response = vercel_blob.put(path, contents, {"access": "public"})
+    fname = _safe_name(file.filename)
+    path  = f"merchants/{merchant.id}/logo/{fname}"
+    url   = _store_file(path, contents, file.content_type)
 
     att = Attachment(
-        url          = response["url"],
-        filename     = file.filename,
+        url          = url,
+        filename     = fname,
         content_type = file.content_type,
         size         = len(contents),
         entity_type  = EntityType.MERCHANT.value,
@@ -192,7 +242,7 @@ def delete_attachment(
     if att.uploaded_by != merchant.id:
         raise HTTPException(403, "Anda tidak punya akses ke file ini")
 
-    _delete_from_vercel(att.url)
+    _delete_stored(att.url)
     db.delete(att)
     db.commit()
     return {"message": "Attachment berhasil dihapus", "id": attachment_id}

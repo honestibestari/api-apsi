@@ -1,9 +1,12 @@
 import os
+from pathlib import Path
+
 from dotenv import load_dotenv
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import Base, engine, sync_columns, reset_schema, apply_manual_migrations
@@ -24,6 +27,8 @@ from app.payment.payment_router             import router as payment_router
 from app.payment_method.payment_method_router import router as payment_method_router
 from app.refund.refund_router               import router as refund_router
 from app.banner.banner_router               import router as banner_router
+from app.maintenance.maintenance_router      import router as maintenance_router
+from app.attachment.attachment_router        import router as attachment_router
 
 
 load_dotenv()
@@ -79,6 +84,41 @@ app.include_router(payment_router)
 app.include_router(payment_method_router)
 app.include_router(refund_router)
 app.include_router(banner_router)
+app.include_router(maintenance_router)
+app.include_router(attachment_router)
+
+# Layani file attachment yang disimpan lokal (fallback tanpa Vercel Blob).
+_STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
+_STATIC_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
+
+# ── Scheduler sweep maintenance order ────────────────────────────────────────
+# Menjalankan timeout siklus order secara periodik (cancel verifying basi,
+# cancel terbuka basi, auto-done waiting_confirmation, flag diproses terlambat).
+# Set MAINTENANCE_SWEEP_SECONDS=0 untuk menonaktifkan (mis. di serverless yang
+# tak mendukung thread latar — pakai cron eksternal ke POST /maintenance/sweep).
+if settings.maintenance_sweep_seconds > 0:
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+
+        from app.maintenance.maintenance_service import run_sweep_with_session
+
+        _scheduler = BackgroundScheduler(daemon=True)
+        _scheduler.add_job(
+            run_sweep_with_session,
+            trigger="interval",
+            seconds=settings.maintenance_sweep_seconds,
+            id="order_maintenance_sweep",
+            max_instances=1,
+            coalesce=True,
+        )
+        _scheduler.start()
+        print(f"[scheduler] sweep maintenance aktif tiap {settings.maintenance_sweep_seconds}s")
+    except Exception as exc:  # pragma: no cover - jangan sampai gagal start app
+        print(f"[scheduler] gagal memulai sweep maintenance: {exc}. "
+              f"Gunakan POST /maintenance/sweep via cron eksternal.")
+
 
 @app.get("/", tags=["Root"])
 def root():

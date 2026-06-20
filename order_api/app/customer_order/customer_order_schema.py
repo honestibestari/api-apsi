@@ -107,6 +107,9 @@ class MerchantOrderNested(BaseModel):
     subtotal:      float
     total_harga:   float
     items:         List[OrderItemOut] = []
+    auto_cancel_at:   Optional[datetime] = None
+    prep_deadline_at: Optional[datetime] = None
+    is_prep_overdue:  bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -123,6 +126,8 @@ class CustomerOrderOut(BaseModel):
     tenant_count:      int
     created_at:        datetime
     updated_at:        Optional[datetime] = None
+    pay_deadline_at:   Optional[datetime] = None
+    auto_confirm_at:   Optional[datetime] = None
     customer:          CustomerBrief
     merchant_orders:   List[MerchantOrderNested] = []
 

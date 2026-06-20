@@ -17,7 +17,9 @@ from app.merchant_order.merchant_order_model import (
     NotifikasiTipe,
     OrderItem,
 )
+from app.payment.payment_model import Payment, StatusPembayaran
 from app.product.product_model import Product
+from app.refund.refund_model import Refund, StatusRefund
 
 
 # ── Eager load ────────────────────────────────────────────────────────────────
@@ -81,6 +83,75 @@ def _upsert_customer(db: Session, data_customer) -> Customer:
     return customer
 
 
+# ── Pembatalan & refund parsial ─────────────────────────────────────────────
+
+def _recompute_order_total(order: CustomerOrder) -> None:
+    """Total struk = jumlah total_harga merchant order yang TIDAK dibatalkan."""
+    order.total_harga = sum(
+        mo.total_harga for mo in order.merchant_orders
+        if mo.status != MerchantOrderStatus.DIBATALKAN
+    )
+
+
+def _order_is_paid(db: Session, order: CustomerOrder) -> bool:
+    """True bila ada pembayaran LUNAS untuk order ini (perlu refund saat dibatalkan)."""
+    return (
+        db.query(Payment)
+        .filter(
+            Payment.id_pesanan == order.id,
+            Payment.status_pembayaran == StatusPembayaran.LUNAS,
+        )
+        .first()
+        is not None
+    )
+
+
+def cancel_merchant_order(
+    db: Session,
+    mo: MerchantOrder,
+    *,
+    create_refund: bool = True,
+) -> None:
+    """Batalkan SATU merchant order secara konsisten:
+
+    • status → dibatalkan (idempotent),
+    • kembalikan stok produk HANYA bila order sudah dibayar (karena stok kini
+      dikurangi saat LUNAS, bukan saat order dibuat),
+    • hitung ulang total struk induk,
+    • catat Refund parsial (status pending) bila order sudah dibayar.
+
+    Tidak commit — pemanggil yang commit. Tidak membuat notifikasi & tidak
+    men-sync status struk (diserahkan ke pemanggil sesuai konteksnya).
+    """
+    if mo.status == MerchantOrderStatus.DIBATALKAN:
+        return
+
+    refund_amount = mo.total_harga
+    mo.status = MerchantOrderStatus.DIBATALKAN
+
+    order = mo.customer_order
+    paid = order is not None and _order_is_paid(db, order)
+
+    # Order belum dibayar tidak pernah mengurangi stok → tak perlu dikembalikan.
+    if paid:
+        for item in mo.items:
+            if item.product:
+                item.product.stok += item.jumlah
+
+    if order is None:
+        return
+
+    _recompute_order_total(order)
+
+    if create_refund and paid and refund_amount > 0:
+        db.add(Refund(
+            id_pesanan    = order.id,
+            nominal       = refund_amount,
+            metode_refund = order.metode_pembayaran,
+            status        = StatusRefund.PENDING,
+        ))
+
+
 # ── Sinkronisasi status ───────────────────────────────────────────────────────
 
 def derive_customer_status(merchant_orders) -> CustomerOrderStatus:
@@ -101,12 +172,12 @@ def derive_customer_status(merchant_orders) -> CustomerOrderStatus:
     return CustomerOrderStatus.OPEN
 
 
-def _auto_cancel_stale_merchant_orders(customer_order: CustomerOrder) -> bool:
+def _auto_cancel_stale_merchant_orders(db: Session, customer_order: CustomerOrder) -> bool:
     """Batalkan merchant order yang masih 'terbuka' melewati batas waktu putusan.
 
     Merchant yang tidak confirm/tolak dalam merchant_decide_timeout_seconds →
-    otomatis 'dibatalkan'. Return True bila ada perubahan.
-    TODO(refund): recompute total_harga & catat refund saat tenant dibatalkan.
+    otomatis 'dibatalkan'. Stok dikembalikan & refund parsial dicatat lewat
+    cancel_merchant_order(). Return True bila ada perubahan.
     """
     secs = settings.merchant_decide_timeout_seconds
     if secs <= 0 or customer_order.status in (
@@ -124,7 +195,14 @@ def _auto_cancel_stale_merchant_orders(customer_order: CustomerOrder) -> bool:
         if ref.tzinfo is None:
             ref = ref.replace(tzinfo=timezone.utc)
         if (now - ref).total_seconds() >= secs:
-            mo.status = MerchantOrderStatus.DIBATALKAN
+            cancel_merchant_order(db, mo)
+            db.add(Notification(
+                merchant_id       = mo.merchant_id,
+                merchant_order_id = mo.id,
+                tipe              = NotifikasiTipe.ORDER_DIBATALKAN,
+                judul             = "Pesanan dibatalkan otomatis",
+                pesan             = f"{mo.order_code} dibatalkan karena tidak direspons tepat waktu.",
+            ))
             changed = True
     return changed
 
@@ -139,7 +217,7 @@ def sync_customer_order_status(customer_order: CustomerOrder) -> None:
 def refresh_order_state(db: Session, customer_order: CustomerOrder) -> None:
     """Terapkan timeout merchant + turunkan ulang status struk. Commit bila berubah."""
     before = customer_order.status
-    timed_out = _auto_cancel_stale_merchant_orders(customer_order)
+    timed_out = _auto_cancel_stale_merchant_orders(db, customer_order)
     sync_customer_order_status(customer_order)
     if timed_out or customer_order.status != before:
         db.commit()
@@ -258,7 +336,9 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
         for product, item in entries:
             line      = product.harga * item.jumlah
             subtotal += line
-            product.stok -= item.jumlah
+            # Stok TIDAK dikurangi di sini. Pengurangan dilakukan saat pembayaran
+            # LUNAS (_settle_payment) agar order yang belum dibayar tidak mengunci
+            # stok. Validasi ketersediaan di atas tetap sebagai penjaga awal.
 
             db.add(OrderItem(
                 merchant_order_id = merchant_order.id,

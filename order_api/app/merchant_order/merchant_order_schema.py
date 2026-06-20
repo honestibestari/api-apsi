@@ -47,6 +47,9 @@ class MerchantOrderOut(BaseModel):
     items:             List[OrderItemOut] = []
     created_at:        datetime
     updated_at:        Optional[datetime] = None
+    auto_cancel_at:    Optional[datetime] = None
+    prep_deadline_at:  Optional[datetime] = None
+    is_prep_overdue:   bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -62,6 +65,9 @@ class MerchantOrderSummary(BaseModel):
     no_meja:        Optional[str] = None
     preview_items:  Optional[str] = None
     created_at:     datetime
+    auto_cancel_at:    Optional[datetime] = None
+    prep_deadline_at:  Optional[datetime] = None
+    is_prep_overdue:   bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

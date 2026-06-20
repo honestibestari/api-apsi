@@ -1,4 +1,5 @@
 import enum
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import (
     Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text,
@@ -6,6 +7,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
+from app.core.config import settings
 from app.core.database import Base
 
 
@@ -85,6 +87,36 @@ class MerchantOrder(Base):
         return ", ".join(
             f"{i.jumlah}x {i.product.nama}" for i in self.items if i.product
         )
+
+    # ── Deadline turunan (untuk warning di FE) ───────────────────────────────
+
+    @property
+    def auto_cancel_at(self):
+        """Batas akhir merchant menerima/tolak pesanan 'terbuka'. Lewat ini →
+        otomatis dibatalkan & dana dikembalikan ke pelanggan."""
+        secs = settings.merchant_decide_timeout_seconds
+        if self.status != MerchantOrderStatus.TERBUKA or secs <= 0:
+            return None
+        ref = self.updated_at or self.created_at
+        return ref + timedelta(seconds=secs) if ref else None
+
+    @property
+    def prep_deadline_at(self):
+        """Batas wajar menyelesaikan pesanan 'diproses'. Lewat ini → ditandai
+        TERLAMBAT (bukan dibatalkan)."""
+        secs = settings.merchant_prep_timeout_seconds
+        if self.status != MerchantOrderStatus.DIPROSES or secs <= 0:
+            return None
+        ref = self.updated_at or self.created_at
+        return ref + timedelta(seconds=secs) if ref else None
+
+    @property
+    def is_prep_overdue(self):
+        deadline = self.prep_deadline_at
+        if not deadline:
+            return False
+        d = deadline if deadline.tzinfo else deadline.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) >= d
 
 
 class OrderItem(Base):
