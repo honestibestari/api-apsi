@@ -2,7 +2,7 @@ import base64
 import json
 from typing import List
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -57,6 +57,23 @@ def delete_dining_table(
     _=Depends(require_admin),
 ):
     return dining_table_service.delete_table(db, table_id)
+
+
+@router.get(
+    "/resolve",
+    summary="Resolve kode QR meja → {code, label} (publik, untuk scan in-app FE)",
+)
+def resolve_dining_table(
+    code: str = Query(..., description="Kode unik dining table dari QR"),
+    db: Session = Depends(get_db),
+):
+    """Dipakai scanner QR in-app: FE membaca kode dari QR, lalu memanggil endpoint
+    ini untuk mendapatkan label meja tanpa full-page redirect (keranjang tetap utuh).
+    """
+    table = dining_table_service.find_active_by_code(db, code)
+    if not table:
+        raise HTTPException(404, "Meja tidak ditemukan atau tidak aktif")
+    return {"code": table.code, "label": table.label}
 
 
 def _encode_payload(code: str, label: str) -> str:
