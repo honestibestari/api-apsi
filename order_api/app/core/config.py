@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     # customer dalam ambang ini → otomatis dianggap 'done'. 0 = off.
     customer_confirm_timeout_seconds: int = 86400  # 24 jam
 
+    # Batas jumlah pesanan AKTIF (belum done/cancelled) per akun customer (per email).
+    # Cegah satu akun menumpuk banyak pesanan sekaligus. 0 = tanpa batas.
+    max_active_orders_per_customer: int = 2
+
     # Interval sweep maintenance otomatis (detik). Menggerakkan semua timeout di
     # atas tanpa bergantung pada polling FE. 0 = nonaktifkan scheduler internal
     # (gunakan endpoint POST /maintenance/sweep via cron eksternal sebagai gantinya).

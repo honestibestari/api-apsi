@@ -141,11 +141,8 @@ def _settle_payment(payment: Payment) -> None:
     for mo in order.merchant_orders:
         if mo.status == MerchantOrderStatus.BARU:
             mo.status = MerchantOrderStatus.TERBUKA
-        # Stok dikurangi tepat saat pembayaran LUNAS (idempotent: _settle_payment
-        # hanya berjalan sekali per pembayaran).
-        for item in mo.items:
-            if item.product:
-                item.product.stok -= item.jumlah
+    # Catatan: stok TIDAK dikurangi di sini — sudah dikonsumsi saat order dibuat
+    # (di-reserve) dan dikembalikan saat dibatalkan.
 
 
 def _auto_settle_if_due(db: Session, payment: Payment) -> None:

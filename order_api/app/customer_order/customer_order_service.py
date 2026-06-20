@@ -115,8 +115,8 @@ def cancel_merchant_order(
     """Batalkan SATU merchant order secara konsisten:
 
     • status → dibatalkan (idempotent),
-    • kembalikan stok produk HANYA bila order sudah dibayar (karena stok kini
-      dikurangi saat LUNAS, bukan saat order dibuat),
+    • kembalikan stok produk (stok di-reserve saat order dibuat, jadi selalu
+      dikembalikan saat dibatalkan),
     • hitung ulang total struk induk,
     • catat Refund parsial (status pending) bila order sudah dibayar.
 
@@ -129,21 +129,18 @@ def cancel_merchant_order(
     refund_amount = mo.total_harga
     mo.status = MerchantOrderStatus.DIBATALKAN
 
+    # Stok dikonsumsi saat order dibuat → selalu kembalikan saat dibatalkan.
+    for item in mo.items:
+        if item.product:
+            item.product.stok += item.jumlah
+
     order = mo.customer_order
-    paid = order is not None and _order_is_paid(db, order)
-
-    # Order belum dibayar tidak pernah mengurangi stok → tak perlu dikembalikan.
-    if paid:
-        for item in mo.items:
-            if item.product:
-                item.product.stok += item.jumlah
-
     if order is None:
         return
 
     _recompute_order_total(order)
 
-    if create_refund and paid and refund_amount > 0:
+    if create_refund and refund_amount > 0 and _order_is_paid(db, order):
         db.add(Refund(
             id_pesanan    = order.id,
             nominal       = refund_amount,
@@ -261,6 +258,7 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
 
     Alur:
     1. Upsert customer (pakai ulang jika email/phone cocok)
+    1b. Batasi jumlah pesanan aktif per akun customer
     2. Validasi meja (jika dine_in)
     3. Buat CustomerOrder (status: verifying)
     4. Ambil semua product sekaligus (1 query), kelompokkan per merchant_id
@@ -270,6 +268,29 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
 
     # 1. Upsert customer
     customer = _upsert_customer(db, data.customer)
+
+    # 1b. Batasi pesanan aktif per akun (belum done/cancelled).
+    max_aktif = settings.max_active_orders_per_customer
+    if max_aktif > 0:
+        aktif = (
+            db.query(CustomerOrder)
+            .filter(
+                CustomerOrder.customer_id == customer.id,
+                CustomerOrder.status.notin_([
+                    CustomerOrderStatus.DONE,
+                    CustomerOrderStatus.CANCELLED,
+                ]),
+            )
+            .count()
+        )
+        if aktif >= max_aktif:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Maksimal {max_aktif} pesanan aktif per akun. "
+                    "Selesaikan pesanan sebelumnya dulu."
+                ),
+            )
 
     # 2. Validasi meja — harus ada DAN aktif (selaras dengan endpoint /scan).
     #    Meja yang dinonaktifkan admin tidak boleh dipakai walau code-nya masih
@@ -340,9 +361,9 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
         for product, item in entries:
             line      = product.harga * item.jumlah
             subtotal += line
-            # Stok TIDAK dikurangi di sini. Pengurangan dilakukan saat pembayaran
-            # LUNAS (_settle_payment) agar order yang belum dibayar tidak mengunci
-            # stok. Validasi ketersediaan di atas tetap sebagai penjaga awal.
+            # Stok dikonsumsi saat order DIBUAT (di-reserve), dikembalikan saat
+            # dibatalkan. Mencegah oversell dari banyak order yang menunggu bayar.
+            product.stok -= item.jumlah
 
             db.add(OrderItem(
                 merchant_order_id = merchant_order.id,
