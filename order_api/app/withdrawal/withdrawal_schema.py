@@ -17,6 +17,11 @@ class WithdrawalCreate(BaseModel):
         return v
 
 
+class WithdrawalReject(BaseModel):
+    """Body opsional untuk menolak withdrawal (alasan penolakan)."""
+    note: Optional[str] = None
+
+
 class WithdrawalOut(BaseModel):
     id:             int
     merchant_id:    int

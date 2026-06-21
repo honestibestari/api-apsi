@@ -18,7 +18,7 @@ from app.merchant_order.merchant_order_model import (
     OrderItem,
 )
 from app.payment.payment_model import Payment, StatusPembayaran
-from app.product.product_model import Product
+from app.product.product_model import Product, ProductAddon
 
 
 # ── Eager load ────────────────────────────────────────────────────────────────
@@ -324,6 +324,15 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
     products    = db.query(Product).filter(Product.id.in_(product_ids)).all()
     product_map = {p.id: p for p in products}
 
+    # 4b. Ambil semua add-on yang dirujuk sekaligus (1 query), lalu petakan.
+    addon_ids = {aid for i in data.items for aid in (i.addon_ids or [])}
+    addon_map: dict = {}
+    if addon_ids:
+        addon_rows = (
+            db.query(ProductAddon).filter(ProductAddon.id.in_(addon_ids)).all()
+        )
+        addon_map = {a.id: a for a in addon_rows}
+
     groups: dict = {}
     for item in data.items:
         product = product_map.get(item.product_id)
@@ -331,6 +340,13 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
             raise HTTPException(status_code=404, detail=f"Product {item.product_id} tidak ditemukan")
         if product.stok < item.jumlah:
             raise HTTPException(status_code=400, detail=f"Stok '{product.nama}' tidak cukup")
+        # Validasi tiap add-on: harus ada, aktif, & milik produk yang sama.
+        for aid in (item.addon_ids or []):
+            addon = addon_map.get(aid)
+            if not addon or addon.product_id != product.id:
+                raise HTTPException(status_code=404, detail=f"Item tambahan {aid} tidak valid untuk '{product.nama}'")
+            if not addon.is_active:
+                raise HTTPException(status_code=400, detail=f"Item tambahan '{addon.nama}' sedang tidak tersedia")
         groups.setdefault(product.merchant_id, []).append((product, item))
 
     # 5. Buat MerchantOrder per tenant
@@ -348,7 +364,12 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
 
         subtotal = 0.0
         for product, item in entries:
-            line      = product.harga * item.jumlah
+            # Add-on yang dipilih → total harga PER UNIT + ringkasan nama.
+            chosen = [addon_map[aid] for aid in (item.addon_ids or [])]
+            addon_unit   = sum(a.harga for a in chosen)
+            addon_label  = ", ".join(a.nama for a in chosen) or None
+
+            line      = (product.harga + addon_unit) * item.jumlah
             subtotal += line
             # Stok dikonsumsi saat order DIBUAT (di-reserve), dikembalikan saat
             # dibatalkan. Mencegah oversell dari banyak order yang menunggu bayar.
@@ -361,6 +382,8 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
                 harga_satuan      = product.harga,
                 subtotal          = line,
                 varian            = item.varian,
+                additionals       = addon_label,
+                additionals_harga = addon_unit,
             ))
 
         merchant_order.subtotal    = subtotal

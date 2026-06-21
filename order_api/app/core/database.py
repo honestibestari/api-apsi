@@ -62,6 +62,23 @@ def apply_manual_migrations():
     if engine.dialect.name != "postgresql":
         return
 
+    # ── Tambah nilai baru ke tipe ENUM native Postgres ──────────────────────────
+    # create_all() TIDAK meng-ALTER tipe enum yang sudah ada. `ALTER TYPE ... ADD
+    # VALUE` harus jalan di luar blok transaksi → pakai koneksi AUTOCOMMIT.
+    # IF NOT EXISTS membuatnya idempotent (aman dijalankan tiap startup).
+    _enum_additions = {
+        "notifikasi_tipe": ["pengumuman", "penting"],
+    }
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        for enum_name, values in _enum_additions.items():
+            for val in values:
+                try:
+                    conn.execute(text(
+                        f"ALTER TYPE {enum_name} ADD VALUE IF NOT EXISTS '{val}'"
+                    ))
+                except Exception as exc:  # pragma: no cover - jangan gagal start app
+                    print(f"[migrate] gagal ADD VALUE {enum_name}={val}: {exc}")
+
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
 

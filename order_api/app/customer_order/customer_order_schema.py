@@ -36,6 +36,7 @@ class ItemCreate(BaseModel):
     product_id: int
     jumlah:     int = 1
     varian:     Optional[str] = None
+    addon_ids:  Optional[List[int]] = None   # id ProductAddon yang dipilih
 
     @field_validator("jumlah")
     @classmethod
@@ -83,6 +84,8 @@ class OrderItemOut(BaseModel):
     harga_satuan: float
     subtotal:     float
     varian:       Optional[str] = None
+    additionals:  Optional[str] = None
+    additionals_harga: float = 0.0
     product:      Optional[ProductInfo] = None
 
     model_config = ConfigDict(from_attributes=True)

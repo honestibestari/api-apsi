@@ -12,7 +12,12 @@ from app.category.category_model import Category
 from app.customer_order.customer_order_model import CustomerOrder, CustomerOrderStatus
 from app.merchant.merchant_model import Merchant, MerchantStatus
 from app.product.product_model import Product
-from app.merchant_order.merchant_order_model import MerchantOrder, MerchantOrderStatus
+from app.merchant_order.merchant_order_model import (
+    MerchantOrder,
+    MerchantOrderStatus,
+    Notification,
+    NotifikasiTipe,
+)
 from app.customer.customer_model import Customer
 from app.withdrawal.withdrawal_model import Withdrawal, WithdrawalStatus
 
@@ -396,3 +401,88 @@ def list_all_orders(
     if status:
         query = query.filter(CustomerOrder.status == status)
     return query.offset(offset).limit(limit).all()
+
+
+# ── Pengumuman / Broadcast ke merchant ────────────────────────────────────────
+
+class AnnouncementIn(BaseModel):
+    judul:        str
+    pesan:        str
+    # 'penting' = masuk kategori Penting di inbox merchant (default, sesuai
+    # kebutuhan); 'pengumuman' = kategori Pengumuman biasa.
+    tipe:         str = "penting"
+    # Target spesifik. None / kosong = broadcast ke SEMUA merchant.
+    merchant_ids: Optional[List[int]] = None
+
+
+@router.post("/announcements", status_code=status.HTTP_201_CREATED,
+             summary="Kirim pengumuman ke merchant (kategori Penting/Pengumuman)")
+def create_announcement(
+    data: AnnouncementIn,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    judul = data.judul.strip()
+    pesan = data.pesan.strip()
+    if not judul or not pesan:
+        raise HTTPException(422, "Judul dan pesan tidak boleh kosong")
+
+    tipe = NotifikasiTipe.PENGUMUMAN if data.tipe == "pengumuman" else NotifikasiTipe.PENTING
+
+    # Tentukan merchant target.
+    query = db.query(Merchant.id)
+    if data.merchant_ids:
+        query = query.filter(Merchant.id.in_(data.merchant_ids))
+    target_ids = [row[0] for row in query.all()]
+    if not target_ids:
+        raise HTTPException(404, "Tidak ada merchant target yang ditemukan")
+
+    for mid in target_ids:
+        db.add(Notification(
+            merchant_id       = mid,
+            merchant_order_id = None,
+            tipe              = tipe,
+            judul             = judul,
+            pesan             = pesan,
+        ))
+    db.commit()
+
+    return {
+        "message": f"Pengumuman terkirim ke {len(target_ids)} merchant",
+        "tipe": tipe.value,
+        "terkirim": len(target_ids),
+    }
+
+
+@router.get("/announcements", summary="Riwayat pengumuman yang dikirim admin")
+def list_announcements(
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    """Riwayat broadcast — dikelompokkan per (judul, pesan, menit dikirim)
+    sehingga satu pengumuman ke banyak merchant tampil sebagai satu baris."""
+    rows = (
+        db.query(
+            Notification.judul,
+            Notification.pesan,
+            Notification.tipe,
+            func.max(Notification.created_at).label("created_at"),
+            func.count(Notification.id).label("penerima"),
+        )
+        .filter(Notification.tipe.in_([NotifikasiTipe.PENGUMUMAN, NotifikasiTipe.PENTING]))
+        .group_by(Notification.judul, Notification.pesan, Notification.tipe)
+        .order_by(func.max(Notification.created_at).desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "judul": r.judul,
+            "pesan": r.pesan,
+            "tipe": getattr(r.tipe, "value", r.tipe),
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "penerima": r.penerima,
+        }
+        for r in rows
+    ]

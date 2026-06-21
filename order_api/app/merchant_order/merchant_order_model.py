@@ -25,8 +25,10 @@ class NotifikasiTipe(str, enum.Enum):
     STATUS_BERUBAH   = "status_berubah"
     ORDER_DIBATALKAN = "order_dibatalkan"
     ORDER_SELESAI    = "order_selesai"
-    PENCAIRAN        = "pencairan"  
+    PENCAIRAN        = "pencairan"
     ULASAN           = "ulasan"
+    PENGUMUMAN       = "pengumuman"   # broadcast biasa dari admin
+    PENTING          = "penting"      # broadcast prioritas tinggi dari admin
 
 
 class MerchantOrder(Base):
@@ -135,6 +137,10 @@ class OrderItem(Base):
     harga_satuan      = Column(Float, nullable=False)
     subtotal          = Column(Float, nullable=False)
     varian            = Column(String(100), nullable=True)
+    # Item tambahan (add-on) yang dipilih pelanggan: nama-nama digabung koma
+    # (mis. "Extra Keju, Telur") + total harga add-on PER UNIT item.
+    additionals       = Column(String(255), nullable=True)
+    additionals_harga = Column(Float, nullable=False, default=0.0)
 
     merchant_order = relationship("MerchantOrder", back_populates="items")
     product        = relationship("Product")

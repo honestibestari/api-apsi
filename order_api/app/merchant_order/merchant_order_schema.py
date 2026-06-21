@@ -23,6 +23,8 @@ class OrderItemOut(BaseModel):
     harga_satuan: float
     subtotal:     float
     varian:       Optional[str] = None
+    additionals:  Optional[str] = None
+    additionals_harga: float = 0.0
     product:      Optional[ProductInfo] = None
 
     model_config = ConfigDict(from_attributes=True)

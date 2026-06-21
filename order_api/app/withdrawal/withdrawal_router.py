@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Body, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_merchant, require_admin
@@ -7,7 +7,12 @@ from app.core.database import get_db
 from app.merchant.merchant_model import Merchant
 from app.withdrawal import withdrawal_service
 from app.withdrawal.withdrawal_model import WithdrawalStatus
-from app.withdrawal.withdrawal_schema import WithdrawalCreate, WithdrawalOut, WithdrawalSummary
+from app.withdrawal.withdrawal_schema import (
+    WithdrawalCreate,
+    WithdrawalOut,
+    WithdrawalReject,
+    WithdrawalSummary,
+)
 
 router = APIRouter(prefix="/withdrawals", tags=["Withdrawals"])
 
@@ -74,10 +79,13 @@ def approve_withdrawal(
             summary="[Admin] Tolak withdrawal")
 def reject_withdrawal(
     withdrawal_id: int,
-    note: Optional[str] = Query(None, description="Alasan penolakan"),
+    payload: Optional[WithdrawalReject] = Body(None),
+    note: Optional[str] = Query(None, description="Alasan penolakan (fallback)"),
     db: Session = Depends(get_db),
     current_admin=Depends(require_admin),
 ):
+    # Terima alasan dari body JSON (utama) maupun query param (kompatibilitas lama).
+    final_note = (payload.note if payload else None) or note
     return withdrawal_service.reject_withdrawal(
-        db, withdrawal_id, note=note, processed_by=current_admin.id
+        db, withdrawal_id, note=final_note, processed_by=current_admin.id
     )

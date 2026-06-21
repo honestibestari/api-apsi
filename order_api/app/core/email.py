@@ -8,9 +8,11 @@ pernah gagal hanya karena email.
 """
 import base64
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from app.core.config import settings
@@ -240,15 +242,33 @@ def _gmail_access_token() -> str:
         raise RuntimeError(f"OAuth token HTTP {exc.code}: {detail}") from exc
 
 
+def _html_to_text(html: str) -> str:
+    """Versi teks polos sederhana dari HTML, untuk bagian multipart/alternative.
+    Email yang punya teks polos + HTML lebih kecil kemungkinan dianggap spam
+    dibanding HTML-only."""
+    text = re.sub(r"(?is)<(script|style).*?</\1>", "", html)        # buang script/style
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)                      # <br> → newline
+    text = re.sub(r"(?i)</(p|div|tr|table|h[1-6])>", "\n", text)     # blok → newline
+    text = re.sub(r"(?s)<[^>]+>", "", text)                          # buang sisa tag
+    text = (text.replace("&amp;", "&").replace("&nbsp;", " ")
+                .replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", '"'))
+    text = re.sub(r"\n\s*\n\s*\n+", "\n\n", text)                    # rapikan baris kosong
+    return "\n".join(line.strip() for line in text.splitlines()).strip()
+
+
 def _send_via_gmail(to: str, subject: str, html: str) -> None:
     """Kirim email lewat Gmail API (HTTPS:443). Dipakai di host yang memblokir
     port SMTP keluar (Render/Railway). Melempar exception bila gagal."""
     access_token = _gmail_access_token()
 
-    msg = MIMEText(html, "html", "utf-8")
+    msg = MIMEMultipart("alternative")
     msg["To"] = to
     msg["From"] = f"{settings.email_from_name} <{settings.gmail_sender_email}>"
     msg["Subject"] = subject
+    msg["Reply-To"] = settings.gmail_sender_email
+    # Urutan penting: text dulu, lalu html (klien email pakai bagian terakhir yg didukung).
+    msg.attach(MIMEText(_html_to_text(html), "plain", "utf-8"))
+    msg.attach(MIMEText(html, "html", "utf-8"))
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("ascii")
 
     payload = json.dumps({"raw": raw}).encode("utf-8")

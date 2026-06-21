@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 from pydantic import BaseModel, ConfigDict, field_validator
 
 if TYPE_CHECKING:
@@ -12,6 +12,37 @@ class CategoryInfo(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ── Item tambahan (add-on) ───────────────────────────────────────────────────
+
+class AddonIn(BaseModel):
+    nama:      str
+    harga:     float = 0.0
+    is_active: bool  = True
+
+    @field_validator("nama")
+    @classmethod
+    def nama_tidak_kosong(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("Nama item tambahan tidak boleh kosong")
+        return v
+
+    @field_validator("harga")
+    @classmethod
+    def harga_non_negatif(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("Harga item tambahan tidak boleh negatif")
+        return v
+
+
+class AddonOut(BaseModel):
+    id:        int
+    nama:      str
+    harga:     float
+    is_active: bool
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ProductCreate(BaseModel):
     nama:        str
     deskripsi:   Optional[str] = None
@@ -19,7 +50,8 @@ class ProductCreate(BaseModel):
     harga:       float
     stok:        int = 0
     merchant_id: int
-    category_id: Optional[int] = None   
+    category_id: Optional[int] = None
+    additionals: Optional[List[AddonIn]] = None
 
     @field_validator("nama")
     @classmethod
@@ -51,6 +83,7 @@ class ProductUpdate(BaseModel):
     harga:       Optional[float] = None
     stok:        Optional[int]   = None
     category_id: Optional[int]   = None
+    additionals: Optional[List[AddonIn]] = None
 
     @field_validator("stok")
     @classmethod
@@ -73,9 +106,10 @@ class ProductSummary(BaseModel):
     harga:       float
     stok:        int
     merchant_id: int
-    category_id: Optional[int]      = None   
-    category:    Optional[CategoryInfo] = None  
+    category_id: Optional[int]      = None
+    category:    Optional[CategoryInfo] = None
     foto: Optional[str] = None
+    additionals: List[AddonOut] = []
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -87,8 +121,9 @@ class ProductDetail(BaseModel):
     harga:       float
     stok:        int
     merchant_id: int
-    category_id: Optional[int]      = None   
-    category:    Optional[CategoryInfo] = None  
+    category_id: Optional[int]      = None
+    category:    Optional[CategoryInfo] = None
+    additionals: List[AddonOut] = []
     created_at:  datetime
     merchant:    "MerchantSummary"
     model_config = ConfigDict(from_attributes=True)
