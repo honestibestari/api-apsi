@@ -1,8 +1,9 @@
 from typing import List, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
+from app.core.auth import hash_password
 from app.merchant.merchant_model import Merchant
-from app.merchant.merchant_schema import MerchantCreate, MerchantUpdate
+from app.merchant.merchant_schema import MerchantCreate, MerchantSelfUpdate, MerchantUpdate
 
 
 def get_merchants(db: Session, offset: int = 0, limit: int = 20, search: Optional[str] = None) -> List[Merchant]:
@@ -51,6 +52,31 @@ def update_merchant(db: Session, merchant_id: int, data: MerchantUpdate) -> Merc
     merchant = get_merchant_or_404(db, merchant_id)
 
     update_fields = data.model_dump(exclude_unset=True)
+    for field, value in update_fields.items():
+        setattr(merchant, field, value)
+
+    db.commit()
+    db.refresh(merchant)
+    return merchant
+
+
+def update_own_merchant(db: Session, merchant: Merchant, data: MerchantSelfUpdate) -> Merchant:
+    """Update profil/toko milik merchant sendiri (PUT /merchants/me).
+
+    Berbeda dari update_merchant (admin), di sini:
+    - `status` tidak bisa diubah (tidak ada di MerchantSelfUpdate).
+    - `password` (bila dikirim) di-hash dan disimpan ke akun User *dan* Merchant.
+      Login memverifikasi `user.password_hash`, jadi keduanya harus sinkron.
+    """
+    update_fields = data.model_dump(exclude_unset=True)
+
+    password = update_fields.pop("password", None)
+    if password:
+        hashed = hash_password(password)
+        merchant.password_hash = hashed
+        if merchant.user:
+            merchant.user.password_hash = hashed
+
     for field, value in update_fields.items():
         setattr(merchant, field, value)
 

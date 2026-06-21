@@ -9,6 +9,7 @@ from app.merchant_order.merchant_order_model import MerchantOrderStatus
 from app.core.auth import get_current_merchant
 from app.merchant.merchant_model import Merchant
 from app.merchant_order.merchant_order_schema import (
+    MerchantDashboardSummary,
     MerchantOrderOut,
     MerchantOrderStatusUpdate,
     MerchantOrderSummary,
@@ -35,6 +36,18 @@ def list_merchant_orders(
     return merchant_order_service.list_merchant_orders(
         db, merchant_id=current_merchant.id  
     )
+
+
+@router.get(
+    "/summary",
+    response_model=MerchantDashboardSummary,
+    summary="[Merchant] Ringkasan keuangan (dashboard Kontrol)",
+)
+def merchant_dashboard_summary(
+    current_merchant: Merchant = Depends(get_current_merchant),
+    db: Session = Depends(get_db),
+):
+    return merchant_order_service.get_dashboard_summary(db, current_merchant)
 
 
 @router.get(

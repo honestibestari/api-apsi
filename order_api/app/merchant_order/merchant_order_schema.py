@@ -94,3 +94,30 @@ class NotificationOut(BaseModel):
 
 class NotificationMarkRead(BaseModel):
     ids: List[int]
+
+
+# ── Dashboard Keuangan (Kontrol) ────────────────────────────────────────────────
+
+class DashboardChartPoint(BaseModel):
+    day:   str      # label hari (Sen, Sel, ...)
+    value: float    # total pendapatan hari itu
+
+
+class DashboardTransaction(BaseModel):
+    id:         str
+    name:       str
+    amount:     float
+    type:       str          # 'masuk' (pesanan) | 'keluar' (pencairan)
+    created_at: datetime
+
+
+class MerchantDashboardSummary(BaseModel):
+    saldo:            float
+    is_open:          bool
+    toko_nama:        str
+    lokasi:           Optional[str] = None
+    total_order:      int           # jumlah pesanan masuk hari ini
+    total_pendapatan: float         # pendapatan dari pesanan selesai hari ini
+    produk_terlaris:  Optional[str] = None
+    weekly_chart:     List[DashboardChartPoint] = []
+    transactions:     List[DashboardTransaction] = []

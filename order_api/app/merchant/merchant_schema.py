@@ -55,6 +55,43 @@ class MerchantUpdate(BaseModel):
         return v
 
 
+class MerchantSelfUpdate(BaseModel):
+    """Body request untuk merchant mengubah profil/toko-nya sendiri
+    (PUT /merchants/me). Semua field opsional (partial update).
+
+    Berbeda dengan MerchantUpdate (khusus admin), schema ini TIDAK mengizinkan
+    ubah `status` (approve/suspend tetap wewenang admin), tetapi mengizinkan
+    ganti `password` dan toggle `is_open`.
+    """
+
+    nama: Optional[str] = None
+    deskripsi: Optional[str] = None
+    alamat: Optional[str] = None
+    owner: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    block: Optional[str] = None
+    category: Optional[str] = None
+    is_open: Optional[bool] = None
+    password: Optional[str] = None
+
+    @field_validator("nama")
+    @classmethod
+    def nama_tidak_kosong(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v = v.strip()
+            if not v:
+                raise ValueError("Nama merchant tidak boleh kosong")
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def password_cukup_panjang(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) < 8:
+            raise ValueError("Password minimal 8 karakter")
+        return v
+
+
 # Output
 class MerchantSummary(BaseModel):
     """Bentuk ringkas untuk list merchant / nested di dalam detail product.
@@ -71,6 +108,7 @@ class MerchantSummary(BaseModel):
     category: Optional[str] = None
     foto: Optional[str] = None
     status: MerchantStatus
+    is_open: bool = True
     rating: float
     total_orders: int
     total_revenue: float
@@ -94,6 +132,7 @@ class MerchantDetail(BaseModel):
     category: Optional[str] = None
     foto: Optional[str] = None
     status: MerchantStatus
+    is_open: bool = True
     rating: float
     total_orders: int
     total_revenue: float

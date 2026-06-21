@@ -1,10 +1,11 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
-from app.core.auth import require_admin
+from app.core.auth import get_current_merchant, require_admin
 from app.core.database import get_db
 from app.merchant import merchant_service
-from app.merchant.merchant_schema import (MerchantCreate, MerchantDetail, MerchantSummary, MerchantUpdate)
+from app.merchant.merchant_model import Merchant
+from app.merchant.merchant_schema import (MerchantCreate, MerchantDetail, MerchantSelfUpdate, MerchantSummary, MerchantUpdate)
 
 router = APIRouter(prefix="/merchants", tags=["Merchants"])
  
@@ -25,6 +26,19 @@ def detail_merchant(merchant_id: int, db: Session = Depends(get_db)):
     return merchant_service.get_merchant_or_404(db, merchant_id)
  
  
+# update profil sendiri — merchant (HARUS didefinisikan sebelum "/{merchant_id}"
+# agar path "me" tidak tertangkap sebagai merchant_id)
+@router.put("/me", response_model=MerchantDetail, summary="[Merchant] Update profil/toko sendiri")
+def update_own_merchant(
+    data: MerchantSelfUpdate,
+    db: Session = Depends(get_db),
+    current_merchant: Merchant = Depends(get_current_merchant),
+):
+    """Merchant mengubah profil/toko miliknya sendiri (termasuk ganti password
+    & toggle buka/tutup toko). Tidak bisa mengubah status akun (wewenang admin)."""
+    return merchant_service.update_own_merchant(db, current_merchant, data)
+
+
 # update — hanya admin
 @router.put("/{merchant_id}", response_model=MerchantDetail, summary="[Admin] Update merchant (partial update)")
 def update_merchant(

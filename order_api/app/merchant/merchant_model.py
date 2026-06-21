@@ -1,8 +1,8 @@
 import enum
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from sqlalchemy.sql import expression, func
 
 from app.core.database import Base
 
@@ -30,6 +30,9 @@ class Merchant(Base):
     category      = Column(String, nullable=True)
     status        = Column(Enum(MerchantStatus, name="merchant_status", values_callable=lambda obj: [e.value for e in obj]), nullable=False,
                            default=MerchantStatus.PENDING, index=True)
+    # Status buka/tutup toko yang diatur sendiri oleh merchant (default: buka).
+    is_open       = Column(Boolean, nullable=False, server_default=expression.true(),
+                           default=True)
     created_at    = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relasi yang sudah ada
