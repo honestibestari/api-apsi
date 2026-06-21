@@ -1,12 +1,17 @@
-"""Pengiriman email notifikasi pesanan lewat Brevo (HTTP API).
+"""Pengiriman email notifikasi pesanan lewat Gmail API (OAuth2, HTTP).
 
-API key & alamat pengirim dibaca dari settings (BREVO_API_KEY / BREVO_SENDER_EMAIL).
-Pengiriman dilewati diam-diam bila keduanya kosong, agar pembuatan order tidak
+Kredensial OAuth2 dibaca dari settings (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET /
+GOOGLE_REFRESH_TOKEN) + GMAIL_SENDER_EMAIL. Refresh token ditukar jadi access
+token via HTTPS, lalu email dikirim lewat Gmail API (tanpa port SMTP). Pengiriman
+dilewati diam-diam bila kredensial belum lengkap, agar pembuatan order tidak
 pernah gagal hanya karena email.
 """
+import base64
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
+from email.mime.text import MIMEText
 
 from app.core.config import settings
 
@@ -213,47 +218,74 @@ def build_refund_email_html(order, nominal, refund_url: str) -> str:
 </html>"""
 
 
-def _send_via_brevo(to: str, subject: str, html: str) -> None:
-    """Kirim email lewat Brevo HTTP API (HTTPS:443). Dipakai di host yang
-    memblokir port SMTP keluar (Render/Railway). Melempar exception bila gagal —
-    ditangani oleh caller send_email()."""
-    payload = json.dumps({
-        "sender": {"name": settings.email_from_name, "email": settings.brevo_sender_email},
-        "to": [{"email": to}],
-        "subject": subject,
-        "htmlContent": html,
+def _gmail_access_token() -> str:
+    """Tukar refresh token jadi access token lewat OAuth2 (HTTPS). Melempar
+    exception bila gagal — ditangani oleh caller send_email()."""
+    data = urllib.parse.urlencode({
+        "client_id": settings.google_client_id,
+        "client_secret": settings.google_client_secret,
+        "refresh_token": settings.google_refresh_token,
+        "grant_type": "refresh_token",
     }).encode("utf-8")
     req = urllib.request.Request(
-        "https://api.brevo.com/v3/smtp/email",
+        "https://oauth2.googleapis.com/token", data=data, method="POST",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            return json.loads(resp.read())["access_token"]
+    except urllib.error.HTTPError as exc:
+        # Body respons sering menjelaskan penyebab (mis. refresh token expired/dicabut).
+        detail = exc.read().decode("utf-8", "replace")
+        raise RuntimeError(f"OAuth token HTTP {exc.code}: {detail}") from exc
+
+
+def _send_via_gmail(to: str, subject: str, html: str) -> None:
+    """Kirim email lewat Gmail API (HTTPS:443). Dipakai di host yang memblokir
+    port SMTP keluar (Render/Railway). Melempar exception bila gagal."""
+    access_token = _gmail_access_token()
+
+    msg = MIMEText(html, "html", "utf-8")
+    msg["To"] = to
+    msg["From"] = f"{settings.email_from_name} <{settings.gmail_sender_email}>"
+    msg["Subject"] = subject
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("ascii")
+
+    payload = json.dumps({"raw": raw}).encode("utf-8")
+    req = urllib.request.Request(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
         data=payload,
         method="POST",
         headers={
-            "api-key": settings.brevo_api_key,
+            "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
-            "Accept": "application/json",
         },
     )
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
             resp.read()
     except urllib.error.HTTPError as exc:
-        # Sertakan body respons agar penyebab (mis. sender belum diverifikasi) terlihat.
         detail = exc.read().decode("utf-8", "replace")
-        raise RuntimeError(f"Brevo HTTP {exc.code}: {detail}") from exc
+        raise RuntimeError(f"Gmail API HTTP {exc.code}: {detail}") from exc
 
 
 def send_email(to: str, subject: str, html: str) -> None:
-    """Kirim email HTML lewat Brevo. Dilewati bila BREVO_API_KEY / BREVO_SENDER_EMAIL
-    belum di-set. Aman dipanggil di background task — error di-log, tidak dilempar."""
+    """Kirim email HTML lewat Gmail API. Dilewati bila kredensial OAuth belum
+    lengkap. Aman dipanggil di background task — error di-log, tidak dilempar."""
     if not to:
         return
 
-    if not (settings.brevo_api_key and settings.brevo_sender_email):
-        print("[email] dilewati: BREVO_API_KEY / BREVO_SENDER_EMAIL belum diset")
+    if not (
+        settings.google_client_id
+        and settings.google_client_secret
+        and settings.google_refresh_token
+        and settings.gmail_sender_email
+    ):
+        print("[email] dilewati: kredensial Gmail OAuth belum lengkap")
         return
 
     try:
-        _send_via_brevo(to, subject, html)
-        print(f"[email] terkirim ke {to} via brevo: {subject}")
+        _send_via_gmail(to, subject, html)
+        print(f"[email] terkirim ke {to} via gmail: {subject}")
     except Exception as exc:  # noqa: BLE001
-        print(f"[email] gagal kirim ke {to} via brevo: {exc}")
+        print(f"[email] gagal kirim ke {to} via gmail: {exc}")

@@ -50,7 +50,7 @@ def create_customer_order(
     order = customer_order_service.create_customer_order(db, data)
 
     # Bangun HTML SAAT request (order masih ter-attach ke session), lalu kirim
-    # via background task (hanya HTTP ke Brevo, tanpa akses DB).
+    # via background task (hanya HTTP ke Gmail API, tanpa akses DB).
     try:
         to = order.customer.email if order.customer else None
         if to:

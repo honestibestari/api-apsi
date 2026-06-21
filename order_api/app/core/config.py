@@ -46,16 +46,18 @@ class Settings(BaseSettings):
     # URL frontend yang dituju setelah scan QR dining table.
     frontend_url: str = "http://localhost:3000"
 
-    # ─── Email (Brevo HTTP API) ──────────────────────────
-    # Pengiriman email notifikasi pesanan lewat Brevo (HTTPS:443) — aman di host
-    # cloud yang memblokir port SMTP keluar (Render/Railway). Bisa kirim ke email
-    # mana pun TANPA punya domain: cukup verifikasi 1 alamat pengirim
-    # (brevo_sender_email) di dashboard Brevo (Senders → klik link verifikasi).
-    # Bila brevo_api_key / brevo_sender_email kosong → pengiriman dilewati
-    # diam-diam (tidak menghalangi pembuatan order).
+    # ─── Email (Gmail API + OAuth2) ──────────────────────
+    # Pengiriman email notifikasi pesanan lewat Gmail API (HTTPS:443) — aman di
+    # host cloud yang memblokir port SMTP (Render/Railway). Kirim dari akun Gmail
+    # sendiri ke email mana pun, gratis, tanpa domain. Butuh kredensial OAuth2
+    # (client id/secret + refresh token; lihat langkah setup). gmail_sender_email
+    # = alamat Gmail akun yang diotorisasi. Bila salah satu kredensial kosong →
+    # pengiriman dilewati diam-diam (tidak menghalangi pembuatan order).
     email_from_name: str = "Teras LA DineHub"
-    brevo_api_key: str = ""
-    brevo_sender_email: str = ""
+    gmail_sender_email: str = ""
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_refresh_token: str = ""
 
     # ─── Pembayaran (mode dummy) ─────────────────────────
     # Selama belum ada gateway asli: pembayaran non-tunai yang masih PENDING akan
