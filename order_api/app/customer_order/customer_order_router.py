@@ -45,12 +45,12 @@ def create_customer_order(
 
     Setelah order dibuat, kirim email konfirmasi ke pelanggan (berisi tombol untuk
     membuka kembali pesanannya). Pengiriman dijadwalkan sebagai background task —
-    tidak memperlambat respons & tidak menggagalkan order bila SMTP error.
+    tidak memperlambat respons & tidak menggagalkan order bila kirim email gagal.
     """
     order = customer_order_service.create_customer_order(db, data)
 
     # Bangun HTML SAAT request (order masih ter-attach ke session), lalu kirim
-    # via background task (hanya SMTP, tanpa akses DB).
+    # via background task (hanya HTTP ke Brevo, tanpa akses DB).
     try:
         to = order.customer.email if order.customer else None
         if to:

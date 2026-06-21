@@ -46,24 +46,16 @@ class Settings(BaseSettings):
     # URL frontend yang dituju setelah scan QR dining table.
     frontend_url: str = "http://localhost:3000"
 
-    # ─── Email (SMTP) ────────────────────────────────────
-    # Kredensial pengirim email notifikasi pesanan. Untuk Gmail, admin_email_password
-    # = App Password (bukan password akun). Bila kosong → pengiriman email dilewati
-    # (tidak menghalangi pembuatan order).
-    admin_email: str = ""
-    admin_email_password: str = ""
-    smtp_host: str = "smtp.gmail.com"
-    smtp_port: int = 587
+    # ─── Email (Brevo HTTP API) ──────────────────────────
+    # Pengiriman email notifikasi pesanan lewat Brevo (HTTPS:443) — aman di host
+    # cloud yang memblokir port SMTP keluar (Render/Railway). Bisa kirim ke email
+    # mana pun TANPA punya domain: cukup verifikasi 1 alamat pengirim
+    # (brevo_sender_email) di dashboard Brevo (Senders → klik link verifikasi).
+    # Bila brevo_api_key / brevo_sender_email kosong → pengiriman dilewati
+    # diam-diam (tidak menghalangi pembuatan order).
     email_from_name: str = "Teras LA DineHub"
-
-    # ─── Email (HTTP API — Resend) ───────────────────────
-    # Host cloud (mis. Railway) memblokir port SMTP keluar, jadi pengiriman lewat
-    # SMTP gagal (Network unreachable / timeout). Resend memakai HTTPS:443 yang
-    # tidak diblokir. Bila resend_api_key di-set → pakai Resend; jika kosong →
-    # fallback ke SMTP. resend_from harus pakai domain terverifikasi di Resend,
-    # atau "onboarding@resend.dev" untuk uji coba.
-    resend_api_key: str = ""
-    resend_from: str = "onboarding@resend.dev"
+    brevo_api_key: str = ""
+    brevo_sender_email: str = ""
 
     # ─── Pembayaran (mode dummy) ─────────────────────────
     # Selama belum ada gateway asli: pembayaran non-tunai yang masih PENDING akan

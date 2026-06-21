@@ -17,6 +17,7 @@ from app.product.product_router import router as product_router
 from app.customer_order.customer_order_router import router as customer_order_router
 from app.merchant_order.merchant_order_router import router as merchant_order_router
 from app.withdrawal.withdrawal_router import router as withdrawal_router
+from app.tenant_balance.tenant_balance_router import router as tenant_balance_router
 from app.review.review_router import router as review_router
 from app.customer.customer_router import router as customer_router
 from app.auth.auth_router import router as auth_router
@@ -75,6 +76,7 @@ app.include_router(dining_table_router)
 app.include_router(customer_order_router)
 app.include_router(merchant_order_router)
 app.include_router(withdrawal_router)
+app.include_router(tenant_balance_router)
 app.include_router(review_router)
 app.include_router(customer_router)
 app.include_router(auth_router)
