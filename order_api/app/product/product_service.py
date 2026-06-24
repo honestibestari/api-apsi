@@ -85,6 +85,7 @@ def create_product(db: Session, data: ProductCreate) -> Product:
         foto=data.foto,
         harga=data.harga,
         stok=data.stok,
+        is_available=data.is_available,
         merchant_id=data.merchant_id,
         category_id=data.category_id,
     )

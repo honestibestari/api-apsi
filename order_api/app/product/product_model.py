@@ -1,6 +1,6 @@
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from sqlalchemy.sql import expression, func
 
 from app.core.database import Base
 
@@ -14,6 +14,11 @@ class Product(Base):
     foto        = Column(String, nullable=True)
     harga       = Column(Float, nullable=False)
     stok        = Column(Integer, nullable=False, default=0)
+    # Ketersediaan jual yang diatur merchant (toggle "Tersedia/Habis"), terpisah
+    # dari stok. Default tersedia. server_default agar baris lama ikut terisi saat
+    # kolom ditambahkan via sync_columns().
+    is_available = Column(Boolean, nullable=False, server_default=expression.true(),
+                          default=True)
     merchant_id = Column(Integer, ForeignKey("merchants.id"), nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())

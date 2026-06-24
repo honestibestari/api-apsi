@@ -30,6 +30,7 @@ from app.refund.refund_router               import router as refund_router
 from app.banner.banner_router               import router as banner_router
 from app.maintenance.maintenance_router      import router as maintenance_router
 from app.attachment.attachment_router        import router as attachment_router
+from app.platform_setting.platform_setting_router import router as platform_setting_router
 
 
 load_dotenv()
@@ -88,6 +89,7 @@ app.include_router(refund_router)
 app.include_router(banner_router)
 app.include_router(maintenance_router)
 app.include_router(attachment_router)
+app.include_router(platform_setting_router)
 
 # Layani file attachment yang disimpan lokal (fallback tanpa Vercel Blob).
 _STATIC_DIR = Path(__file__).resolve().parents[1] / "static"

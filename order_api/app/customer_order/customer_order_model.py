@@ -50,6 +50,12 @@ class CustomerOrder(Base):
     metode_pembayaran_id = Column(Integer, ForeignKey("payment_methods.id"), nullable=True)
     catatan           = Column(Text, nullable=True)
     total_harga       = Column(Float, nullable=False, default=0.0)
+    # Biaya layanan platform (pendapatan platform) yang dibebankan ke customer dan
+    # SUDAH termasuk di total_harga. platform_fee_refunded = porsi biaya layanan
+    # yang dikembalikan saat refund parsial (tenant dibatalkan); pendapatan bersih
+    # platform untuk order ini = platform_fee − platform_fee_refunded.
+    platform_fee          = Column(Float, nullable=False, default=0.0, server_default="0")
+    platform_fee_refunded = Column(Float, nullable=False, default=0.0, server_default="0")
     created_at        = Column(DateTime(timezone=True), server_default=func.now())
     updated_at        = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -82,6 +88,16 @@ class CustomerOrder(Base):
     @property
     def tenant_count(self):
         return len(self.merchant_orders)
+
+    @property
+    def subtotal(self):
+        """Subtotal produk (tanpa biaya layanan) = jumlah total_harga tenant yang
+        TIDAK dibatalkan. total_harga = subtotal + biaya layanan tersisa."""
+        from app.merchant_order.merchant_order_model import MerchantOrderStatus
+        return sum(
+            mo.total_harga for mo in self.merchant_orders
+            if mo.status != MerchantOrderStatus.DIBATALKAN
+        )
 
     @property
     def customer_nama(self):

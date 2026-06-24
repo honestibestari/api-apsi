@@ -21,8 +21,9 @@ class LoginRequest(BaseModel):
  
 class RegisterRequest(BaseModel):
     nama:      str
-    identifier: str   # email atau nomor HP
+    identifier: str   # email atau nomor HP (dipakai untuk login)
     password:  str
+    phone:     Optional[str] = None   # nomor HP terpisah (bila daftar pakai email)
     owner:     Optional[str] = None
     alamat:    Optional[str] = None
     block:     Optional[str] = None
@@ -91,13 +92,17 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
     is_email = "@" in data.identifier
 
+    # Nomor HP merchant: bila daftar pakai HP → dari identifier; bila pakai email →
+    # dari field `phone` terpisah (boleh kosong).
+    phone = data.identifier if not is_email else (data.phone or None)
+
     # Cek duplikat
     existing_user = db.query(User).filter(User.email == data.identifier).first()
     if existing_user:
         raise HTTPException(status_code=409, detail="Email sudah terdaftar")
 
-    if not is_email:
-        existing_phone = db.query(Merchant).filter(Merchant.phone == data.identifier).first()
+    if phone:
+        existing_phone = db.query(Merchant).filter(Merchant.phone == phone).first()
         if existing_phone:
             raise HTTPException(status_code=409, detail="Nomor HP sudah terdaftar")
 
@@ -120,7 +125,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         password_hash = hashed,            # ← sama dengan user
         nama          = data.nama,
         email         = data.identifier if is_email else None,
-        phone         = data.identifier if not is_email else None,
+        phone         = phone,
         owner         = data.owner,
         alamat        = data.alamat,
         block         = data.block,

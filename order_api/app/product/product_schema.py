@@ -49,6 +49,7 @@ class ProductCreate(BaseModel):
     foto:        Optional[str] = None
     harga:       float
     stok:        int = 0
+    is_available: bool = True
     merchant_id: int
     category_id: Optional[int] = None
     additionals: Optional[List[AddonIn]] = None
@@ -82,6 +83,7 @@ class ProductUpdate(BaseModel):
     foto:        Optional[str]   = None
     harga:       Optional[float] = None
     stok:        Optional[int]   = None
+    is_available: Optional[bool] = None
     category_id: Optional[int]   = None
     additionals: Optional[List[AddonIn]] = None
 
@@ -105,6 +107,7 @@ class ProductSummary(BaseModel):
     nama:        str
     harga:       float
     stok:        int
+    is_available: bool = True
     merchant_id: int
     category_id: Optional[int]      = None
     category:    Optional[CategoryInfo] = None
@@ -120,6 +123,7 @@ class ProductDetail(BaseModel):
     foto:        Optional[str]      = None
     harga:       float
     stok:        int
+    is_available: bool = True
     merchant_id: int
     category_id: Optional[int]      = None
     category:    Optional[CategoryInfo] = None

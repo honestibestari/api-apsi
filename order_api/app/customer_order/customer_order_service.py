@@ -18,6 +18,7 @@ from app.merchant_order.merchant_order_model import (
     OrderItem,
 )
 from app.payment.payment_model import Payment, StatusPembayaran
+from app.platform_setting import platform_setting_service as fee_svc
 from app.product.product_model import Product, ProductAddon
 
 
@@ -84,12 +85,24 @@ def _upsert_customer(db: Session, data_customer) -> Customer:
 
 # ── Pembatalan & refund parsial ─────────────────────────────────────────────
 
+def _all_merch_total(order: CustomerOrder) -> float:
+    """Total produk seluruh tenant (termasuk yang dibatalkan — nilainya tetap
+    tersimpan di mo.total_harga). Jadi basis stabil untuk proporsi biaya layanan."""
+    return sum(mo.total_harga for mo in order.merchant_orders)
+
+
 def _recompute_order_total(order: CustomerOrder) -> None:
-    """Total struk = jumlah total_harga merchant order yang TIDAK dibatalkan."""
-    order.total_harga = sum(
+    """Hitung ulang total struk = subtotal tenant aktif + biaya layanan tersisa.
+
+    Biaya layanan tersisa proporsional terhadap nilai tenant yang TIDAK dibatalkan;
+    porsi untuk tenant yang batal dikembalikan ke customer saat refund dibentuk.
+    """
+    aktif = sum(
         mo.total_harga for mo in order.merchant_orders
         if mo.status != MerchantOrderStatus.DIBATALKAN
     )
+    sisa_fee = fee_svc.fee_portion(order.platform_fee, aktif, _all_merch_total(order))
+    order.total_harga = aktif + sisa_fee
 
 
 def _order_is_paid(db: Session, order: CustomerOrder) -> bool:
@@ -398,8 +411,11 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
             pesan             = f"Pesanan {merchant_order.order_code} menunggu konfirmasi.",
         ))
 
-    # 6. Simpan total dan commit
-    customer_order.total_harga = total_order
+    # 6. Hitung biaya layanan platform (pendapatan platform) dari subtotal seluruh
+    #    keranjang, lalu tambahkan ke total bayar customer. Rate diambil dari DB
+    #    (diatur admin), bukan hardcode.
+    customer_order.platform_fee = fee_svc.compute_fee(total_order, fee_svc.get_settings(db))
+    customer_order.total_harga = total_order + customer_order.platform_fee
     db.commit()
 
     return _load_customer_order(db, customer_order.id)

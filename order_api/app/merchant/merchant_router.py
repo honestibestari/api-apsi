@@ -5,7 +5,7 @@ from app.core.auth import get_current_merchant, require_admin
 from app.core.database import get_db
 from app.merchant import merchant_service
 from app.merchant.merchant_model import Merchant
-from app.merchant.merchant_schema import (MerchantCreate, MerchantDetail, MerchantSelfUpdate, MerchantSummary, MerchantUpdate)
+from app.merchant.merchant_schema import (MerchantDetail, MerchantSelfUpdate, MerchantSummary, MerchantUpdate)
 
 router = APIRouter(prefix="/merchants", tags=["Merchants"])
  

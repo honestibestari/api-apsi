@@ -14,7 +14,7 @@ from app.dining_table.dining_table_model import DiningTable
 from app.customer.customer_model import Customer 
 from app.customer_order.customer_order_model import CustomerOrder 
 from app.merchant_order.merchant_order_model import (MerchantOrder, OrderItem, Notification)
-from app.withdrawal.withdrawal_model import Withdrawal  
+from app.withdrawal.withdrawal_model import Withdrawal, MerchantBankAccount
 from app.review.review_model import Review  
 from app.admin.admin_model import Admin
 from app.category.category_model import Category                             
@@ -22,7 +22,8 @@ from app.payment_method.payment_method_model import PaymentMethod
 from app.payment.payment_model import Payment
 from app.refund.refund_model import Refund
 from app.banner.banner_model import Banner
-from app.attachment.attachment_model import Attachment 
+from app.attachment.attachment_model import Attachment
+from app.platform_setting.platform_setting_model import PlatformSetting
 
 # (2) Resolve forward reference: ProductDetail.merchant -> MerchantSummary.
 from app.merchant.merchant_schema import MerchantSummary

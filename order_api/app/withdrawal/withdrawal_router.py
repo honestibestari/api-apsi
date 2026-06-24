@@ -8,6 +8,8 @@ from app.merchant.merchant_model import Merchant
 from app.withdrawal import withdrawal_service
 from app.withdrawal.withdrawal_model import WithdrawalStatus
 from app.withdrawal.withdrawal_schema import (
+    BankAccountCreate,
+    BankAccountOut,
     WithdrawalCreate,
     WithdrawalOut,
     WithdrawalReject,
@@ -51,6 +53,40 @@ def list_my_withdrawals(
     return withdrawal_service.list_withdrawals(
         db, merchant_id=current_merchant.id, status=status, offset=offset, limit=limit
     )
+
+
+# ── Rekening bank tersimpan (milik merchant) ─────────────────────────────────
+# Didefinisikan sebelum route withdrawal lain yang generik agar path "bank-accounts"
+# tidak rancu. Semua dibatasi ke merchant pemilik token.
+
+@router.get("/bank-accounts", response_model=List[BankAccountOut],
+            summary="[Merchant] List rekening tersimpan milik sendiri")
+def list_bank_accounts(
+    current_merchant: Merchant = Depends(get_current_merchant),
+    db: Session = Depends(get_db),
+):
+    return withdrawal_service.list_bank_accounts(db, current_merchant.id)
+
+
+@router.post("/bank-accounts", response_model=BankAccountOut,
+             status_code=status.HTTP_201_CREATED,
+             summary="[Merchant] Tambah rekening tujuan pencairan")
+def create_bank_account(
+    data: BankAccountCreate,
+    current_merchant: Merchant = Depends(get_current_merchant),
+    db: Session = Depends(get_db),
+):
+    return withdrawal_service.create_bank_account(db, current_merchant.id, data)
+
+
+@router.delete("/bank-accounts/{account_id}",
+               summary="[Merchant] Hapus rekening tersimpan milik sendiri")
+def delete_bank_account(
+    account_id: int,
+    current_merchant: Merchant = Depends(get_current_merchant),
+    db: Session = Depends(get_db),
+):
+    return withdrawal_service.delete_bank_account(db, current_merchant.id, account_id)
 
 
 @router.post("", response_model=WithdrawalOut, status_code=status.HTTP_201_CREATED,

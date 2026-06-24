@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -18,6 +18,16 @@ from app.merchant_order.merchant_order_schema import (
 )
 
 router = APIRouter(prefix="/merchant-orders", tags=["Merchant Orders"])
+
+
+def _ensure_self(merchant_id: int, current_merchant: Merchant) -> None:
+    """Cegah IDOR: merchant hanya boleh mengakses data miliknya sendiri.
+
+    Endpoint notifikasi menerima merchant_id di path; pastikan ia sama dengan
+    merchant pemilik token, bukan milik merchant lain.
+    """
+    if merchant_id != current_merchant.id:
+        raise HTTPException(status_code=403, detail="Tidak boleh mengakses data merchant lain")
 
 
 @router.get(
@@ -84,8 +94,10 @@ def list_notifications(
     only_unread: bool = Query(False, description="true = belum dibaca saja"),
     offset:      int  = Query(0, ge=0),
     limit:       int  = Query(50, ge=1, le=100),
+    current_merchant: Merchant = Depends(get_current_merchant),
     db: Session = Depends(get_db),
 ):
+    _ensure_self(merchant_id, current_merchant)
     return merchant_order_service.list_notifications(
         db, merchant_id, only_unread=only_unread, offset=offset, limit=limit
     )
@@ -95,7 +107,13 @@ def list_notifications(
     "/notifications/{merchant_id}/read",
     summary="[Merchant] Tandai notifikasi tertentu sudah dibaca",
 )
-def mark_read(merchant_id: int, data: NotificationMarkRead, db: Session = Depends(get_db)):
+def mark_read(
+    merchant_id: int,
+    data: NotificationMarkRead,
+    current_merchant: Merchant = Depends(get_current_merchant),
+    db: Session = Depends(get_db),
+):
+    _ensure_self(merchant_id, current_merchant)
     return merchant_order_service.mark_notifications_read(db, merchant_id, data)
 
 
@@ -103,5 +121,10 @@ def mark_read(merchant_id: int, data: NotificationMarkRead, db: Session = Depend
     "/notifications/{merchant_id}/read-all",
     summary="[Merchant] Tandai semua notifikasi sudah dibaca",
 )
-def mark_all_read(merchant_id: int, db: Session = Depends(get_db)):
+def mark_all_read(
+    merchant_id: int,
+    current_merchant: Merchant = Depends(get_current_merchant),
+    db: Session = Depends(get_db),
+):
+    _ensure_self(merchant_id, current_merchant)
     return merchant_order_service.mark_all_notifications_read(db, merchant_id)

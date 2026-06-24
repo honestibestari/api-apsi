@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.merchant.merchant_model import Merchant
 from app.merchant_order.merchant_order_model import Notification, NotifikasiTipe
-from app.withdrawal.withdrawal_model import Withdrawal, WithdrawalStatus
+from app.withdrawal.withdrawal_model import (
+    MerchantBankAccount,
+    Withdrawal,
+    WithdrawalStatus,
+)
 from app.withdrawal.withdrawal_schema import WithdrawalSummary, WithdrawalStatusSummary
 
 
@@ -206,3 +210,62 @@ def reject_withdrawal(
     db.commit()
     db.refresh(w)
     return w
+
+
+# ── Rekening bank tersimpan (tujuan pencairan) ─────────────────────────────────
+
+def list_bank_accounts(db: Session, merchant_id: int) -> List[MerchantBankAccount]:
+    return (
+        db.query(MerchantBankAccount)
+        .filter(MerchantBankAccount.merchant_id == merchant_id)
+        .order_by(MerchantBankAccount.created_at.asc(), MerchantBankAccount.id.asc())
+        .all()
+    )
+
+
+def create_bank_account(db: Session, merchant_id: int, data) -> MerchantBankAccount:
+    """Tambah rekening. Idempoten: rekening dengan (bank, nomor) yang sama
+    dikembalikan apa adanya alih-alih membuat duplikat."""
+    bank           = data.bank.strip()
+    account_number = data.account_number.strip()
+    account_name   = data.account_name.strip()
+
+    existing = (
+        db.query(MerchantBankAccount)
+        .filter(
+            MerchantBankAccount.merchant_id == merchant_id,
+            MerchantBankAccount.bank == bank,
+            MerchantBankAccount.account_number == account_number,
+        )
+        .first()
+    )
+    if existing:
+        return existing
+
+    acc = MerchantBankAccount(
+        merchant_id    = merchant_id,
+        bank           = bank,
+        account_number = account_number,
+        account_name   = account_name,
+    )
+    db.add(acc)
+    db.commit()
+    db.refresh(acc)
+    return acc
+
+
+def delete_bank_account(db: Session, merchant_id: int, account_id: int) -> dict:
+    acc = (
+        db.query(MerchantBankAccount)
+        .filter(MerchantBankAccount.id == account_id)
+        .first()
+    )
+    if not acc:
+        raise HTTPException(404, "Rekening tidak ditemukan")
+    # Cegah IDOR: hanya boleh menghapus rekening milik sendiri.
+    if acc.merchant_id != merchant_id:
+        raise HTTPException(403, "Tidak boleh menghapus rekening merchant lain")
+
+    db.delete(acc)
+    db.commit()
+    return {"message": "Rekening dihapus", "id": account_id}

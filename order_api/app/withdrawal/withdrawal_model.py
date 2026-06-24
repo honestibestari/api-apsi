@@ -38,3 +38,21 @@ class Withdrawal(Base):
     @property
     def merchant_nama(self):
         return self.merchant.nama if self.merchant else None
+
+
+class MerchantBankAccount(Base):
+    """Rekening tujuan pencairan yang disimpan merchant (reusable saat menarik dana).
+
+    Sebelumnya hanya disimpan di localStorage browser → hilang bila ganti
+    perangkat/clear browser. Kini dipersistensikan per-merchant di server.
+    """
+    __tablename__ = "merchant_bank_accounts"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    merchant_id    = Column(Integer, ForeignKey("merchants.id"), nullable=False, index=True)
+    bank           = Column(String(50), nullable=False)
+    account_number = Column(String(40), nullable=False)
+    account_name   = Column(String(100), nullable=False)
+    created_at     = Column(DateTime(timezone=True), server_default=func.now())
+
+    merchant = relationship("Merchant", back_populates="bank_accounts")

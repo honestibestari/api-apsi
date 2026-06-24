@@ -36,6 +36,20 @@ def seed_payment_methods(db):
         print(f"[OK] {added} metode pembayaran ditambahkan")
 
 
+def seed_platform_settings(db):
+    """Tanam baris konfigurasi biaya layanan platform (idempotent).
+
+    Default demo: 5% + Rp 1.000 per transaksi, aktif. Admin bisa mengubahnya
+    kapan saja via halaman Pengaturan Sistem → Biaya Layanan.
+    """
+    from app.platform_setting.platform_setting_model import PlatformSetting
+    if db.query(PlatformSetting).count() > 0:
+        return
+    db.add(PlatformSetting(fee_rate=5.0, fee_fixed=1000.0, is_active=True))
+    db.commit()
+    print("[OK] Pengaturan biaya layanan platform ditambahkan (5% + Rp 1.000)")
+
+
 def seed_global_categories(db):
     """Tanam kategori produk global awal (idempotent — skip jika sudah ada)."""
     if db.query(Category).count() > 0:
@@ -228,6 +242,7 @@ def seed_data():
     seed_banners(db)
     seed_global_categories(db)
     seed_payment_methods(db)
+    seed_platform_settings(db)
 
     merchants_exist = db.query(Merchant).count() > 0
     dining_tables_exist = db.query(DiningTable).count() > 0

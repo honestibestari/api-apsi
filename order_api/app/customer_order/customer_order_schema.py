@@ -125,7 +125,9 @@ class CustomerOrderOut(BaseModel):
     tipe_order:           TipeOrder
     metode:               Optional[PaymentMethodInfo] = None
     catatan:              Optional[str] = None
-    total_harga:       float
+    subtotal:          float = 0.0          # produk saja (tanpa biaya layanan)
+    platform_fee:      float = 0.0          # biaya layanan platform
+    total_harga:       float                # subtotal + biaya layanan
     no_meja:           Optional[str] = None
     tenant_count:      int
     created_at:        datetime

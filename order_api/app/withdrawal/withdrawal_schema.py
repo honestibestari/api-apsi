@@ -38,6 +38,28 @@ class WithdrawalOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class BankAccountCreate(BaseModel):
+    bank:           str
+    account_number: str
+    account_name:   str
+
+    @field_validator("bank", "account_number", "account_name")
+    @classmethod
+    def tidak_kosong(cls, v: str) -> str:
+        v = (v or "").strip()
+        if not v:
+            raise ValueError("Data rekening tidak boleh kosong")
+        return v
+
+
+class BankAccountOut(BaseModel):
+    id:             int
+    bank:           str
+    account_number: str
+    account_name:   str
+    model_config = ConfigDict(from_attributes=True)
+
+
 class WithdrawalStatusSummary(BaseModel):
     count:        int
     total_amount: float

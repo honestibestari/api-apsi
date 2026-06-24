@@ -20,6 +20,7 @@ from app.merchant_order.merchant_order_model import (
 )
 from app.customer.customer_model import Customer
 from app.withdrawal.withdrawal_model import Withdrawal, WithdrawalStatus
+from app.platform_setting import platform_setting_service as fee_svc
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -136,6 +137,24 @@ def dashboard(
     pending_withdrawals       = pw[0] or 0
     pending_withdrawal_amount = float(pw[1] or 0.0)
 
+    # ── Pendapatan platform (biaya layanan bersih dari order DONE) ───────────────
+    # net = platform_fee − platform_fee_refunded. Diakui saat struk tuntas (DONE),
+    # selaras dengan definisi "total transaksi" di atas.
+    def _platform_revenue(start=None, end=None) -> float:
+        q = (
+            db.query(func.coalesce(
+                func.sum(CustomerOrder.platform_fee - CustomerOrder.platform_fee_refunded), 0.0
+            ))
+            .filter(CustomerOrder.status == DONE)
+        )
+        if start is not None:
+            q = q.filter(CustomerOrder.created_at >= start, CustomerOrder.created_at < end)
+        return float(q.scalar() or 0.0)
+
+    platform_revenue_today = _platform_revenue(today_start, today_end)
+    platform_revenue_total = _platform_revenue()
+    fee_setting = fee_svc.get_settings(db)
+
     # ── Grafik tren 8 hari (transaksi DONE per hari WIB) ─────────────────────────
     rows = (
         db.query(CustomerOrder.created_at, CustomerOrder.total_harga)
@@ -221,6 +240,11 @@ def dashboard(
         "new_customers_today":          new_customers_today,
         "pending_withdrawals":          pending_withdrawals,
         "pending_withdrawal_amount":    pending_withdrawal_amount,
+        "platform_revenue_today":       platform_revenue_today,
+        "platform_revenue_total":       platform_revenue_total,
+        "platform_fee_rate":            fee_setting.fee_rate,
+        "platform_fee_fixed":           fee_setting.fee_fixed,
+        "platform_fee_active":          fee_setting.is_active,
         "transaksi_chart":              transaksi_chart,
         "top_tenants":                  top_tenants,
         "recent_transactions":          recent_transactions,

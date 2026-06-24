@@ -26,6 +26,7 @@ from app.merchant_order.merchant_order_model import (
     NotifikasiTipe,
     OrderItem,
 )
+from app.platform_setting import platform_setting_service as fee_svc
 from app.refund.refund_model import Refund, StatusRefund
 
 _OVERDUE_JUDUL = "Pesanan terlambat"
@@ -196,13 +197,20 @@ def _create_completion_refunds(db: Session) -> int:
     for order in orders:
         if not co_svc._order_is_paid(db, order):
             continue
-        refundable = sum(
+        cancelled_merch = sum(
             mo.total_harga
             for mo in order.merchant_orders
             if mo.status == MerchantOrderStatus.DIBATALKAN
         )
-        if refundable <= 0:
+        if cancelled_merch <= 0:
             continue
+
+        # Kembalikan juga porsi biaya layanan untuk tenant yang dibatalkan
+        # (proporsional terhadap nilainya). Sisanya tetap jadi pendapatan platform.
+        all_merch = sum(mo.total_harga for mo in order.merchant_orders)
+        fee_refund = fee_svc.fee_portion(order.platform_fee, cancelled_merch, all_merch)
+        order.platform_fee_refunded = fee_refund
+        refundable = cancelled_merch + fee_refund
 
         db.add(Refund(id_pesanan=order.id, nominal=refundable, status=StatusRefund.PENDING))
         db.flush()

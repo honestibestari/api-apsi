@@ -42,6 +42,8 @@ class Merchant(Base):
     merchant_orders = relationship("MerchantOrder", back_populates="merchant")
     withdrawals     = relationship("Withdrawal", back_populates="merchant",
                                    cascade="all, delete-orphan")
+    bank_accounts   = relationship("MerchantBankAccount", back_populates="merchant",
+                                   cascade="all, delete-orphan")
     reviews         = relationship("Review", back_populates="merchant",
                                    cascade="all, delete-orphan")
 
