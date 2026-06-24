@@ -1,14 +1,28 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.attachment import attachment_service
 from app.banner.banner_model import Banner
 from app.banner.banner_schema import BannerCreate, BannerOut, BannerUpdate
 from app.core.auth import require_admin
 from app.core.database import get_db
 
 router = APIRouter(prefix="/banners", tags=["Banners"])
+
+
+@router.post("/upload-image", summary="Upload gambar banner (admin) → kembalikan URL")
+async def upload_banner_image(
+    file: UploadFile = File(...),
+    _=Depends(require_admin),
+):
+    """Unggah gambar banner; kembalikan { url } untuk disimpan di image_url banner.
+
+    Terpisah dari create/update agar bisa dipakai sebelum banner punya id.
+    """
+    url = await attachment_service.store_image(file, "banners")
+    return {"url": url}
 
 
 @router.get("", response_model=List[BannerOut], summary="List banner aktif (publik)")

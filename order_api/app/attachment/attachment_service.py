@@ -1,5 +1,6 @@
 import os
 import re
+import secrets
 from pathlib import Path
 from typing import List, Optional
 
@@ -168,6 +169,20 @@ async def upload_merchant_logo(
     db.commit()
     db.refresh(att)
     return att
+
+
+async def store_image(file: UploadFile, path_prefix: str) -> str:
+    """Simpan satu gambar & kembalikan URL publiknya — TANPA baris Attachment/DB.
+
+    Dipakai untuk gambar yang URL-nya disimpan langsung di kolom tabel lain
+    (mis. banners.image_url), bukan lewat tabel attachment polymorphic. Prefix
+    acak mencegah file dengan nama sama saling menimpa.
+    """
+    contents = await file.read()
+    _validate(file, contents)
+    fname = _safe_name(file.filename)
+    path  = f"{path_prefix}/{secrets.token_hex(4)}/{fname}"
+    return _store_file(path, contents, file.content_type)
 
 
 # ── READ ──────────────────────────────────────────────────────────────────────
