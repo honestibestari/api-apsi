@@ -1,5 +1,7 @@
+import calendar
 from datetime import date, datetime, timedelta
-from typing import List, Optional
+from io import BytesIO
+from typing import List, Optional, Tuple
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
@@ -28,6 +30,13 @@ from app.withdrawal.withdrawal_model import Withdrawal, WithdrawalStatus
 
 # Nama hari ringkas (index = weekday(); Senin = 0).
 _HARI = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"]
+
+# Nama bulan (index 1..12) untuk laporan tahunan.
+_BULAN = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+          "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+
+# Periode laporan penjualan yang didukung.
+_PERIODE_LABEL = {"weekly": "Mingguan", "monthly": "Bulanan", "yearly": "Tahunan"}
 
 # Transisi status yang diizinkan
 _ALLOWED_TRANSITIONS = {
@@ -308,3 +317,197 @@ def get_dashboard_summary(db: Session, merchant: Merchant) -> MerchantDashboardS
         weekly_chart=weekly_chart,
         transactions=transactions,
     )
+
+
+# ── Laporan Penjualan (export Excel) ─────────────────────────────────────────────
+
+def _report_buckets(period: str, today: date) -> Tuple[List[Tuple[str, date, date]], date, date]:
+    """Tentukan rentang & daftar bucket laporan sesuai periode.
+
+    Return (buckets, periode_mulai, periode_selesai) dengan tiap bucket =
+    (label, tanggal_mulai, tanggal_selesai) inklusif.
+      - weekly  : 7 hari terakhir, bucket per hari.
+      - monthly : bulan berjalan (tgl 1 s/d hari ini), bucket per hari.
+      - yearly  : tahun berjalan (Jan s/d bulan ini), bucket per bulan.
+    """
+    if period == "weekly":
+        start = today - timedelta(days=6)
+        buckets = [
+            (f"{_HARI[(start + timedelta(days=i)).weekday()]}, "
+             f"{(start + timedelta(days=i)).strftime('%d/%m')}",
+             start + timedelta(days=i), start + timedelta(days=i))
+            for i in range(7)
+        ]
+        return buckets, start, today
+
+    if period == "monthly":
+        start = today.replace(day=1)
+        days = (today - start).days + 1
+        buckets = [
+            (f"{(start + timedelta(days=i)).day} {_BULAN[start.month]}",
+             start + timedelta(days=i), start + timedelta(days=i))
+            for i in range(days)
+        ]
+        return buckets, start, today
+
+    # yearly
+    start = today.replace(month=1, day=1)
+    buckets = []
+    for m in range(1, today.month + 1):
+        last_day = calendar.monthrange(today.year, m)[1]
+        m_start = date(today.year, m, 1)
+        m_end = date(today.year, m, last_day)
+        buckets.append((f"{_BULAN[m]} {today.year}", m_start, m_end))
+    return buckets, start, today
+
+
+def build_sales_report(db: Session, merchant: Merchant, period: str) -> Tuple[bytes, str]:
+    """Bangun file Excel (.xlsx) laporan penjualan merchant untuk satu periode.
+
+    Hanya pesanan berstatus SELESAI yang dihitung sebagai penjualan (konsisten
+    dengan perhitungan pendapatan di dashboard). Return (bytes_xlsx, filename).
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    if period not in _PERIODE_LABEL:
+        raise HTTPException(status_code=400, detail="Periode harus weekly, monthly, atau yearly")
+
+    today = date.today()
+    buckets, periode_mulai, periode_selesai = _report_buckets(period, today)
+
+    orders = (
+        db.query(MerchantOrder)
+        .options(joinedload(MerchantOrder.items).joinedload(OrderItem.product))
+        .filter(
+            MerchantOrder.merchant_id == merchant.id,
+            MerchantOrder.status == MerchantOrderStatus.SELESAI,
+        )
+        .all()
+    )
+
+    # Hanya pesanan dalam rentang periode.
+    in_range = [
+        o for o in orders
+        if (d := _local_date(o.created_at)) is not None
+        and periode_mulai <= d <= periode_selesai
+    ]
+
+    # Agregasi per bucket + ringkasan + produk terlaris.
+    bucket_orders = {i: 0 for i in range(len(buckets))}
+    bucket_revenue = {i: 0.0 for i in range(len(buckets))}
+    produk_qty: dict[str, int] = {}
+    total_order = 0
+    total_pendapatan = 0.0
+
+    for o in in_range:
+        d = _local_date(o.created_at)
+        for i, (_, b_start, b_end) in enumerate(buckets):
+            if b_start <= d <= b_end:
+                bucket_orders[i] += 1
+                bucket_revenue[i] += o.total_harga or 0.0
+                break
+        total_order += 1
+        total_pendapatan += o.total_harga or 0.0
+        for it in o.items:
+            if it.product:
+                produk_qty[it.product.nama] = produk_qty.get(it.product.nama, 0) + it.jumlah
+
+    produk_terlaris = max(produk_qty, key=produk_qty.get) if produk_qty else "-"
+    label = _PERIODE_LABEL[period]
+
+    # ── Susun workbook ────────────────────────────────────────────────────────
+    BRAND = "1D3A27"
+    GOLD = "C8961A"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Laporan {label}"
+
+    bold = Font(bold=True)
+    white_bold = Font(bold=True, color="FFFFFF")
+    title_font = Font(bold=True, size=14, color=BRAND)
+    head_fill = PatternFill("solid", fgColor=BRAND)
+    gold_fill = PatternFill("solid", fgColor=GOLD)
+    thin = Side(style="thin", color="D9D9D9")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    rupiah_fmt = '"Rp"#,##0'
+    right = Alignment(horizontal="right")
+    center = Alignment(horizontal="center")
+
+    ws.column_dimensions["A"].width = 28
+    ws.column_dimensions["B"].width = 20
+    ws.column_dimensions["C"].width = 22
+
+    # Judul & meta
+    ws["A1"] = "Laporan Penjualan"
+    ws["A1"].font = title_font
+    ws["A2"] = f"Periode: {label}"
+    ws["A2"].font = bold
+    ws["A3"] = f"Toko: {merchant.nama}"
+    ws["A4"] = (f"Rentang: {periode_mulai.strftime('%d/%m/%Y')} "
+                f"– {periode_selesai.strftime('%d/%m/%Y')}")
+    ws["A5"] = f"Dicetak: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+
+    # Ringkasan
+    ws["A7"] = "Ringkasan"
+    ws["A7"].font = Font(bold=True, color=BRAND)
+    summary = [
+        ("Total Pesanan Selesai", total_order, None),
+        ("Total Pendapatan", total_pendapatan, rupiah_fmt),
+        ("Produk Terlaris", produk_terlaris, None),
+    ]
+    r = 8
+    for nama_ringkas, val, fmt in summary:
+        ws.cell(row=r, column=1, value=nama_ringkas).font = bold
+        c = ws.cell(row=r, column=2, value=val)
+        if fmt:
+            c.number_format = fmt
+        r += 1
+
+    # Tabel rincian per bucket
+    head_row = r + 1
+    bucket_header = {"weekly": "Tanggal", "monthly": "Tanggal", "yearly": "Bulan"}[period]
+    headers = [bucket_header, "Jumlah Pesanan", "Pendapatan"]
+    for col, h in enumerate(headers, start=1):
+        cell = ws.cell(row=head_row, column=col, value=h)
+        cell.font = white_bold
+        cell.fill = head_fill
+        cell.border = border
+        cell.alignment = center
+
+    data_row = head_row + 1
+    for i, (blabel, _, _) in enumerate(buckets):
+        ws.cell(row=data_row, column=1, value=blabel).border = border
+        oc = ws.cell(row=data_row, column=2, value=bucket_orders[i])
+        oc.border = border
+        oc.alignment = right
+        rc = ws.cell(row=data_row, column=3, value=bucket_revenue[i])
+        rc.number_format = rupiah_fmt
+        rc.border = border
+        rc.alignment = right
+        data_row += 1
+
+    # Baris total
+    tc1 = ws.cell(row=data_row, column=1, value="TOTAL")
+    tc1.font = bold
+    tc1.fill = gold_fill
+    tc1.border = border
+    tc2 = ws.cell(row=data_row, column=2, value=total_order)
+    tc2.font = bold
+    tc2.fill = gold_fill
+    tc2.border = border
+    tc2.alignment = right
+    tc3 = ws.cell(row=data_row, column=3, value=total_pendapatan)
+    tc3.font = bold
+    tc3.fill = gold_fill
+    tc3.number_format = rupiah_fmt
+    tc3.border = border
+    tc3.alignment = right
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"laporan-penjualan-{period}-{today.strftime('%Y%m%d')}.xlsx"
+    return buf.getvalue(), filename

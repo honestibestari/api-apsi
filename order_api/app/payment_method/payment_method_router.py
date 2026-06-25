@@ -32,7 +32,7 @@ def create_payment_method(
     ).first()
     if existing:
         raise HTTPException(409, f"Metode '{data.nama_metode}' sudah ada")
-    pm = PaymentMethod(nama_metode=data.nama_metode, fee=data.fee)
+    pm = PaymentMethod(nama_metode=data.nama_metode)
     db.add(pm)
     db.commit()
     db.refresh(pm)
@@ -40,7 +40,7 @@ def create_payment_method(
 
 
 @router.patch("/{pm_id}", response_model=PaymentMethodOut,
-              summary="Update metode pembayaran — toggle aktif / ubah fee (admin)")
+              summary="Update metode pembayaran — toggle aktif / ubah nama (admin)")
 def update_payment_method(
     pm_id: int,
     data: PaymentMethodUpdate,
@@ -62,8 +62,6 @@ def update_payment_method(
         if bentrok:
             raise HTTPException(409, f"Metode '{nama}' sudah ada")
         pm.nama_metode = nama
-    if data.fee is not None:
-        pm.fee = data.fee
     if data.is_active is not None:
         pm.is_active = data.is_active
 

@@ -69,6 +69,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Agar FE bisa membaca nama file unduhan (mis. laporan penjualan Excel).
+    expose_headers=["Content-Disposition"],
 )
 
 app.include_router(product_router)

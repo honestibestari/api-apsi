@@ -1,14 +1,15 @@
 from typing import Optional
- 
-from fastapi import APIRouter, Depends, HTTPException
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
  
+from app.auth import password_reset_service
 from app.core.auth import create_token, hash_password, verify_password
 from app.core.database import get_db
 from app.user.user_model import User, UserRole
 from app.merchant.merchant_model import Merchant, MerchantStatus
- 
+
 router = APIRouter(prefix="/auth", tags=["Auth"])
  
  
@@ -19,6 +20,15 @@ class LoginRequest(BaseModel):
     password:   str
  
  
+class ForgotPasswordRequest(BaseModel):
+    identifier: str   # email, username, atau nomor HP merchant
+
+
+class ResetPasswordRequest(BaseModel):
+    token:    str
+    password: str
+
+
 class RegisterRequest(BaseModel):
     nama:      str
     identifier: str   # email atau nomor HP (dipakai untuk login)
@@ -86,6 +96,36 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     return response
  
  
+# ── Lupa / Reset Password (Merchant) ───────────────────────────────────────────
+
+@router.post("/forgot-password")
+def forgot_password(
+    data: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Kirim link reset password ke email merchant.
+
+    Selalu mengembalikan pesan sukses yang sama — tidak membocorkan apakah
+    identifier terdaftar (mencegah enumerasi akun).
+    """
+    password_reset_service.request_reset(db, data.identifier, background_tasks)
+    return {"message": "Jika akun terdaftar, link atur ulang kata sandi telah dikirim ke email."}
+
+
+@router.get("/reset-password/validate")
+def validate_reset_token(token: str, db: Session = Depends(get_db)):
+    """Cek apakah token reset masih valid (untuk FE menampilkan form/expired)."""
+    return {"valid": password_reset_service.validate_token(db, token)}
+
+
+@router.post("/reset-password")
+def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Set password baru memakai token dari link email (sekali pakai)."""
+    password_reset_service.reset_password(db, data.token, data.password)
+    return {"message": "Kata sandi berhasil diperbarui. Silakan masuk dengan kata sandi baru."}
+
+
 # ── Register Merchant ─────────────────────────────────────────────────────────
  
 @router.post("/register", status_code=201)

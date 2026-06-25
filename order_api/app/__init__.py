@@ -24,6 +24,7 @@ from app.refund.refund_model import Refund
 from app.banner.banner_model import Banner
 from app.attachment.attachment_model import Attachment
 from app.platform_setting.platform_setting_model import PlatformSetting
+from app.auth.password_reset_model import PasswordResetToken
 
 # (2) Resolve forward reference: ProductDetail.merchant -> MerchantSummary.
 from app.merchant.merchant_schema import MerchantSummary

@@ -101,8 +101,8 @@ def apply_manual_migrations():
                 # Pastikan metode legacy ada agar backfill bisa mencocokkan.
                 for nama in ("QRIS", "Tunai"):
                     conn.execute(text(
-                        "INSERT INTO payment_methods (nama_metode, is_active, fee) "
-                        "SELECT :nama, true, '' "
+                        "INSERT INTO payment_methods (nama_metode, is_active) "
+                        "SELECT :nama, true "
                         "WHERE NOT EXISTS (SELECT 1 FROM payment_methods "
                         "WHERE lower(nama_metode) = lower(:nama))"
                     ), {"nama": nama})
@@ -122,6 +122,14 @@ def apply_manual_migrations():
     if "customers" in tables:
         with engine.begin() as conn:
             conn.execute(text('ALTER TABLE customers DROP CONSTRAINT IF EXISTS customers_phone_key'))
+
+    # ── payment_methods.fee → DROP (fee per metode dihapus) ─────────────────────
+    if "payment_methods" in tables:
+        cols = {c["name"] for c in inspector.get_columns("payment_methods")}
+        if "fee" in cols:
+            with engine.begin() as conn:
+                conn.execute(text('ALTER TABLE payment_methods DROP COLUMN IF EXISTS fee'))
+                print("[migrate] dropped payment_methods.fee (fee per metode dihapus)")
 
     # ── payments: drop struk_dikirim + backfill public_token ────────────────────
     if "payments" in tables:

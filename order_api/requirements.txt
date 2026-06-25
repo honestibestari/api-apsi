@@ -18,3 +18,6 @@ python-multipart==0.0.12
 
 # Scheduler sweep maintenance order (timeout otomatis)
 apscheduler==3.10.4
+
+# Export laporan penjualan merchant ke Excel (.xlsx)
+openpyxl==3.1.5

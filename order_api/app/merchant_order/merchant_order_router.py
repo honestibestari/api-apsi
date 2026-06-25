@@ -1,6 +1,8 @@
+import urllib.parse
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -58,6 +60,28 @@ def merchant_dashboard_summary(
     db: Session = Depends(get_db),
 ):
     return merchant_order_service.get_dashboard_summary(db, current_merchant)
+
+
+@router.get(
+    "/report",
+    summary="[Merchant] Unduh laporan penjualan (Excel: mingguan/bulanan/tahunan)",
+)
+def download_sales_report(
+    period: str = Query("weekly", description="weekly | monthly | yearly"),
+    current_merchant: Merchant = Depends(get_current_merchant),
+    db: Session = Depends(get_db),
+):
+    """Hasilkan file Excel laporan penjualan merchant untuk periode terpilih."""
+    content, filename = merchant_order_service.build_sales_report(db, current_merchant, period)
+    # RFC 5987: dukung nama file aman di header Content-Disposition.
+    quoted = urllib.parse.quote(filename)
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quoted}",
+        },
+    )
 
 
 @router.get(

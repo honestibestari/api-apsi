@@ -19,17 +19,17 @@ def seed_payment_methods(db):
     maupun perubahan dari admin.
     """
     canonical = [
-        ("QRIS",          "0.7%"),
-        ("Tunai",         "0%"),       # → type "manual": flow langsung selesai
-        ("Transfer Bank", "Rp 2.500"),
-        ("GoPay",         "2%"),
-        ("OVO",           "2%"),
+        "QRIS",
+        "Tunai",          # → type "manual": flow langsung selesai
+        "Transfer Bank",
+        "GoPay",
+        "OVO",
     ]
     existing = {m.nama_metode.lower() for m in db.query(PaymentMethod).all()}
     added = 0
-    for nama, fee in canonical:
+    for nama in canonical:
         if nama.lower() not in existing:
-            db.add(PaymentMethod(nama_metode=nama, fee=fee, is_active=True))
+            db.add(PaymentMethod(nama_metode=nama, is_active=True))
             added += 1
     if added:
         db.commit()

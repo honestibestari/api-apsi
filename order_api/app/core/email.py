@@ -220,6 +220,62 @@ def build_refund_email_html(order, nominal, refund_url: str) -> str:
 </html>"""
 
 
+def build_reset_password_html(nama: str, reset_url: str) -> str:
+    """Email berisi tombol/link reset password merchant (link sekali pakai)."""
+    nama = nama or "Merchant"
+    return f"""\
+<!DOCTYPE html>
+<html lang="id">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:24px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,0.06);">
+
+        <tr><td style="background:linear-gradient(135deg,{BRAND_LIGHT} 0%,{BRAND} 100%);padding:28px 24px;">
+          <p style="margin:0;color:#ffffff;font-size:20px;font-weight:800;">Teras LA DineHub</p>
+          <p style="margin:6px 0 0;color:#d9e4dd;font-size:13px;">Permintaan atur ulang kata sandi</p>
+        </td></tr>
+
+        <tr><td style="padding:24px 24px 8px;">
+          <p style="margin:0 0 4px;font-size:15px;color:#111827;">Halo <b>{nama}</b>,</p>
+          <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.6;">
+            Kami menerima permintaan untuk mengatur ulang kata sandi akun merchant kamu.
+            Klik tombol di bawah untuk membuat kata sandi baru. Tautan ini hanya berlaku
+            <b>1 jam</b> dan hanya bisa dipakai sekali.
+          </p>
+        </td></tr>
+
+        <tr><td align="center" style="padding:18px 24px 28px;">
+          <a href="{reset_url}" target="_blank"
+             style="display:inline-block;background:linear-gradient(135deg,{BRAND_LIGHT} 0%,{BRAND} 100%);
+                    color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;
+                    padding:14px 28px;border-radius:14px;box-shadow:0 6px 16px rgba(29,58,39,.32);">
+            Atur Ulang Kata Sandi
+          </a>
+          <p style="margin:14px 0 0;font-size:11px;color:#9ca3af;line-height:1.5;">
+            Tombol tidak berfungsi? Salin tautan ini ke browser:<br>
+            <span style="color:{GOLD};word-break:break-all;">{reset_url}</span>
+          </p>
+          <p style="margin:14px 0 0;font-size:11px;color:#9ca3af;line-height:1.5;">
+            Bukan kamu yang meminta? Abaikan email ini — kata sandi tidak akan berubah.
+          </p>
+        </td></tr>
+
+        <tr><td style="background:#f9fafb;padding:18px 24px;border-top:1px solid #eef0f2;">
+          <p style="margin:0;font-size:11px;color:#9ca3af;line-height:1.6;">
+            Email otomatis dari Teras LA DineHub. Mohon jangan balas email ini.
+          </p>
+        </td></tr>
+
+      </table>
+      <p style="margin:14px 0 0;font-size:11px;color:#b0b6bd;">© Teras LA DineHub</p>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+
 def _gmail_access_token() -> str:
     """Tukar refresh token jadi access token lewat OAuth2 (HTTPS). Melempar
     exception bila gagal — ditangani oleh caller send_email()."""
