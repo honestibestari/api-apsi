@@ -1,11 +1,12 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.product import product_service
 from app.product.product_schema import (ProductCreate, ProductDetail, ProductSummary, ProductUpdate)
-from app.core.auth import get_current_merchant
+from app.core.auth import get_current_merchant, get_current_user
 from app.merchant.merchant_model import Merchant
+from app.user.user_model import UserRole
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -65,10 +66,21 @@ def update_product(
 @router.delete("/{product_id}")
 def delete_product(
     product_id: int,
-    current_merchant: Merchant = Depends(get_current_merchant),  # ← auth di sini
+    current_user=Depends(get_current_user),  # admin ATAU merchant pemilik
     db: Session = Depends(get_db),
 ):
+    """Hapus produk. Boleh dilakukan admin (produk apa pun) atau merchant
+    pemilik produk tersebut. Produk yang sudah pernah dipakai transaksi ditolak
+    di service (409) — sarankan nonaktifkan saja."""
     product = product_service.get_product_or_404(db, product_id)
-    if product.merchant_id != current_merchant.id:
-        raise HTTPException(403, "Anda tidak berhak menghapus produk ini")
+
+    if current_user.role == UserRole.ADMIN:
+        pass  # admin boleh menghapus produk milik siapa pun
+    elif current_user.role == UserRole.MERCHANT:
+        merchant = current_user.merchant
+        if not merchant or product.merchant_id != merchant.id:
+            raise HTTPException(403, "Anda tidak berhak menghapus produk ini")
+    else:
+        raise HTTPException(403, "Akses ditolak")
+
     return product_service.delete_product(db, product_id)

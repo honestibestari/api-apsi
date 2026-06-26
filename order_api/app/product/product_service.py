@@ -126,9 +126,32 @@ def update_product(db: Session, product_id: int, data: ProductUpdate) -> Product
 
 
 def delete_product(db: Session, product_id: int) -> dict:
-    """Hapus satu product."""
+    """Hapus satu product.
+
+    Produk yang PERNAH dipakai dalam transaksi (punya OrderItem) tidak boleh
+    dihapus — menghapusnya akan merusak riwayat pesanan/laporan. Sarankan
+    nonaktifkan saja (is_available=False) lewat pesan error.
+    """
+    from app.merchant_order.merchant_order_model import OrderItem
+
     product = get_product_or_404(db, product_id)
     nama = product.nama
+
+    used = (
+        db.query(OrderItem.id)
+        .filter(OrderItem.product_id == product_id)
+        .first()
+        is not None
+    )
+    if used:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Produk '{nama}' sudah pernah dipakai dalam transaksi sehingga "
+                "tidak dapat dihapus. Nonaktifkan saja agar tidak bisa dipesan "
+                "tanpa menghapus riwayat pesanan."
+            ),
+        )
 
     db.delete(product)
     db.commit()
