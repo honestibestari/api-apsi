@@ -47,7 +47,9 @@ def get_products(db: Session, offset: int = 0, limit: int = 20, merchant_id: Opt
     query = (
         db.query(Product)
         .options(selectinload(Product.additionals))
-        .order_by(Product.nama)
+        # Produk non-aktif (is_available=False) selalu di bawah; dalam tiap grup
+        # tetap urut nama. is_available.desc() → True (tersedia) dulu, baru False.
+        .order_by(Product.is_available.desc(), Product.nama)
     )
 
     if only_active_merchant:
