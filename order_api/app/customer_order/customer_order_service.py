@@ -367,6 +367,13 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
                 status_code=400,
                 detail=f"Merchant penjual '{product.nama}' sedang tidak aktif, produk tidak bisa dipesan",
             )
+        # Produk yang dinonaktifkan merchant (toggle "Habis") tidak boleh dipesan
+        # walau masih tersimpan di keranjang pelanggan.
+        if not product.is_available:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Produk '{product.nama}' sedang tidak tersedia",
+            )
         if product.stok < item.jumlah:
             raise HTTPException(status_code=400, detail=f"Stok '{product.nama}' tidak cukup")
         # Validasi tiap add-on: harus ada, aktif, & milik produk yang sama.
