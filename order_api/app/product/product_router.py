@@ -16,9 +16,20 @@ def list_products(
     search:      Optional[str] = Query(None),
     offset:      int = Query(0, ge=0),
     limit:       int = Query(20, ge=1, le=100),
+    only_active_merchant: bool = Query(
+        True,
+        description="Hanya product dari merchant ACTIVE. Set False di panel merchant untuk mengelola menu sendiri.",
+    ),
     db: Session = Depends(get_db),
 ):
-    return product_service.get_products(db, merchant_id=merchant_id, search=search, offset=offset, limit=limit)
+    return product_service.get_products(
+        db,
+        merchant_id=merchant_id,
+        search=search,
+        offset=offset,
+        limit=limit,
+        only_active_merchant=only_active_merchant,
+    )
 
 
 @router.get("/{product_id}", response_model=ProductDetail, summary="Detail product beserta info merchant")

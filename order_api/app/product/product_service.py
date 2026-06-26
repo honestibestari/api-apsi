@@ -2,7 +2,7 @@ from typing import List, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, selectinload
 from app.category.category_model import Category
-from app.merchant.merchant_model import Merchant
+from app.merchant.merchant_model import Merchant, MerchantStatus
 from app.product.product_model import Product, ProductAddon
 from app.product.product_schema import ProductCreate, ProductUpdate
 
@@ -31,13 +31,17 @@ def _sync_addons(product: Product, addons) -> None:
         )
 
 
-def get_products(db: Session, offset: int = 0, limit: int = 20, merchant_id: Optional[int] = None, search: Optional[str] = None) -> List[Product]:
+def get_products(db: Session, offset: int = 0, limit: int = 20, merchant_id: Optional[int] = None, search: Optional[str] = None, only_active_merchant: bool = True) -> List[Product]:
     """Ambil daftar product dengan optional filter & pagination.
     Args:
         offset:        Offset pagination.
         limit:       Maks record (maks 100).
         merchant_id: Filter hanya product milik merchant ini.
         search:      Pencarian substring pada nama product.
+        only_active_merchant: Bila True (default), hanya tampilkan product dari
+            merchant berstatus ACTIVE. Merchant yang dinonaktifkan/pending/suspended
+            tidak boleh muncul di etalase pelanggan. Set False untuk panel merchant
+            yang mengelola menunya sendiri tanpa peduli status.
     """
     limit = min(limit, 100)
     query = (
@@ -45,6 +49,11 @@ def get_products(db: Session, offset: int = 0, limit: int = 20, merchant_id: Opt
         .options(selectinload(Product.additionals))
         .order_by(Product.nama)
     )
+
+    if only_active_merchant:
+        query = query.join(Merchant, Product.merchant_id == Merchant.id).filter(
+            Merchant.status == MerchantStatus.ACTIVE
+        )
 
     if merchant_id is not None:
         query = query.filter(Product.merchant_id == merchant_id)

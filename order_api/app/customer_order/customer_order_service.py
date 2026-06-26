@@ -17,6 +17,7 @@ from app.merchant_order.merchant_order_model import (
     NotifikasiTipe,
     OrderItem,
 )
+from app.merchant.merchant_model import Merchant, MerchantStatus
 from app.payment.payment_model import Payment, StatusPembayaran
 from app.platform_setting import platform_setting_service as fee_svc
 from app.product.product_model import Product, ProductAddon
@@ -337,6 +338,15 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
     products    = db.query(Product).filter(Product.id.in_(product_ids)).all()
     product_map = {p.id: p for p in products}
 
+    # 4a. Ambil status merchant pemilik product → cegah pesan dari merchant
+    #     yang dinonaktifkan/pending/suspended (tidak muncul di etalase, tapi
+    #     bisa saja masih tersimpan di keranjang pelanggan).
+    merchant_ids = {p.merchant_id for p in products}
+    merchant_map = {
+        m.id: m
+        for m in db.query(Merchant).filter(Merchant.id.in_(merchant_ids)).all()
+    }
+
     # 4b. Ambil semua add-on yang dirujuk sekaligus (1 query), lalu petakan.
     addon_ids = {aid for i in data.items for aid in (i.addon_ids or [])}
     addon_map: dict = {}
@@ -351,6 +361,12 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
         product = product_map.get(item.product_id)
         if not product:
             raise HTTPException(status_code=404, detail=f"Product {item.product_id} tidak ditemukan")
+        merchant = merchant_map.get(product.merchant_id)
+        if not merchant or merchant.status != MerchantStatus.ACTIVE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Merchant penjual '{product.nama}' sedang tidak aktif, produk tidak bisa dipesan",
+            )
         if product.stok < item.jumlah:
             raise HTTPException(status_code=400, detail=f"Stok '{product.nama}' tidak cukup")
         # Validasi tiap add-on: harus ada, aktif, & milik produk yang sama.
