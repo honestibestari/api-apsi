@@ -102,12 +102,18 @@ class ProductUpdate(BaseModel):
         return v
 
 
+class ProductBan(BaseModel):
+    """Body request admin untuk blokir/buka-blokir produk (PUT /products/{id}/ban)."""
+    is_banned: bool
+
+
 class ProductSummary(BaseModel):
     id:          int
     nama:        str
     harga:       float
     stok:        int
     is_available: bool = True
+    is_banned:   bool = False
     merchant_id: int
     category_id: Optional[int]      = None
     category:    Optional[CategoryInfo] = None
@@ -124,6 +130,7 @@ class ProductDetail(BaseModel):
     harga:       float
     stok:        int
     is_available: bool = True
+    is_banned:   bool = False
     merchant_id: int
     category_id: Optional[int]      = None
     category:    Optional[CategoryInfo] = None

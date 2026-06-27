@@ -39,9 +39,10 @@ def get_products(db: Session, offset: int = 0, limit: int = 20, merchant_id: Opt
         merchant_id: Filter hanya product milik merchant ini.
         search:      Pencarian substring pada nama product.
         only_active_merchant: Bila True (default), hanya tampilkan product dari
-            merchant berstatus ACTIVE. Merchant yang dinonaktifkan/pending/suspended
-            tidak boleh muncul di etalase pelanggan. Set False untuk panel merchant
-            yang mengelola menunya sendiri tanpa peduli status.
+            merchant berstatus ACTIVE *dan* sedang buka (is_open=True). Merchant
+            yang dinonaktifkan/pending/suspended ATAU sedang tutup tidak boleh
+            muncul di etalase pelanggan. Set False untuk panel merchant yang
+            mengelola menunya sendiri tanpa peduli status/buka-tutup.
     """
     limit = min(limit, 100)
     query = (
@@ -54,7 +55,10 @@ def get_products(db: Session, offset: int = 0, limit: int = 20, merchant_id: Opt
 
     if only_active_merchant:
         query = query.join(Merchant, Product.merchant_id == Merchant.id).filter(
-            Merchant.status == MerchantStatus.ACTIVE
+            Merchant.status == MerchantStatus.ACTIVE,
+            Merchant.is_open.is_(True),
+            # Produk yang diblokir admin tidak pernah muncul di etalase pelanggan.
+            Product.is_banned.is_(False),
         )
 
     if merchant_id is not None:
@@ -122,6 +126,20 @@ def update_product(db: Session, product_id: int, data: ProductUpdate) -> Product
     if "additionals" in data.model_fields_set:
         _sync_addons(product, data.additionals)
 
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+def set_product_ban(db: Session, product_id: int, is_banned: bool) -> Product:
+    """Blokir / buka-blokir produk (khusus admin).
+
+    Berbeda dari is_available yang diatur merchant: ban di sini menyembunyikan
+    produk dari etalase pelanggan & mencegah pemesanan, dan merchant tidak bisa
+    mengubahnya sendiri (ProductUpdate tidak punya field is_banned).
+    """
+    product = get_product_or_404(db, product_id)
+    product.is_banned = is_banned
     db.commit()
     db.refresh(product)
     return product

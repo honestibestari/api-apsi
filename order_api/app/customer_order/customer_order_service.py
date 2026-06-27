@@ -367,12 +367,25 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
                 status_code=400,
                 detail=f"Merchant penjual '{product.nama}' sedang tidak aktif, produk tidak bisa dipesan",
             )
+        # Merchant yang sedang tutup (is_open=False) tidak menerima pesanan,
+        # walau produknya masih tersimpan di keranjang pelanggan.
+        if not merchant.is_open:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Merchant penjual '{product.nama}' sedang tutup, produk tidak bisa dipesan",
+            )
         # Produk yang dinonaktifkan merchant (toggle "Habis") tidak boleh dipesan
         # walau masih tersimpan di keranjang pelanggan.
         if not product.is_available:
             raise HTTPException(
                 status_code=400,
                 detail=f"Produk '{product.nama}' sedang tidak tersedia",
+            )
+        # Produk yang diblokir admin tidak bisa dipesan sama sekali.
+        if product.is_banned:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Produk '{product.nama}' sedang diblokir dan tidak bisa dipesan",
             )
         if product.stok < item.jumlah:
             raise HTTPException(status_code=400, detail=f"Stok '{product.nama}' tidak cukup")

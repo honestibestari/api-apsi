@@ -3,8 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.product import product_service
-from app.product.product_schema import (ProductCreate, ProductDetail, ProductSummary, ProductUpdate)
-from app.core.auth import get_current_merchant, get_current_user
+from app.product.product_schema import (ProductBan, ProductCreate, ProductDetail, ProductSummary, ProductUpdate)
+from app.core.auth import get_current_merchant, get_current_user, require_admin
 from app.merchant.merchant_model import Merchant
 from app.user.user_model import UserRole
 
@@ -60,6 +60,22 @@ def update_product(
     if product.merchant_id != current_merchant.id:
         raise HTTPException(403, "Anda tidak berhak mengubah produk ini")
     return product_service.update_product(db, product_id, data)
+
+
+# ban / unban — hanya admin
+@router.put("/{product_id}/ban", response_model=ProductDetail, summary="[Admin] Blokir / buka-blokir produk")
+def ban_product(
+    product_id: int,
+    data: ProductBan,
+    _=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Blokir produk (is_banned=true) atau buka blokir (is_banned=false).
+
+    Produk yang diblokir disembunyikan dari etalase pelanggan dan tidak bisa
+    dipesan. Berbeda dari nonaktif biasa: merchant TIDAK bisa membatalkan blokir
+    ini — hanya admin."""
+    return product_service.set_product_ban(db, product_id, data.is_banned)
 
 
 # delete

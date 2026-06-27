@@ -19,6 +19,12 @@ class Product(Base):
     # kolom ditambahkan via sync_columns().
     is_available = Column(Boolean, nullable=False, server_default=expression.true(),
                           default=True)
+    # Blokir/ban produk oleh ADMIN (mis. melanggar aturan). Berbeda dari
+    # is_available (diatur merchant): bila True, produk disembunyikan dari
+    # pelanggan & tidak bisa dipesan, dan MERCHANT tidak bisa membatalkannya —
+    # hanya admin yang bisa membuka blokir. Default tidak diblokir.
+    is_banned   = Column(Boolean, nullable=False, server_default=expression.false(),
+                         default=False)
     merchant_id = Column(Integer, ForeignKey("merchants.id"), nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
