@@ -338,6 +338,12 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
     products    = db.query(Product).filter(Product.id.in_(product_ids)).all()
     product_map = {p.id: p for p in products}
 
+    # Produk yang sama bisa muncul di beberapa item (kombinasi add-on berbeda),
+    # jadi stok divalidasi terhadap TOTAL jumlah yang diminta per produk.
+    total_diminta: dict = {}
+    for i in data.items:
+        total_diminta[i.product_id] = total_diminta.get(i.product_id, 0) + i.jumlah
+
     # 4a. Ambil status merchant pemilik product → cegah pesan dari merchant
     #     yang dinonaktifkan/pending/suspended (tidak muncul di etalase, tapi
     #     bisa saja masih tersimpan di keranjang pelanggan).
@@ -387,8 +393,13 @@ def create_customer_order(db: Session, data: CustomerOrderCreate) -> CustomerOrd
                 status_code=400,
                 detail=f"Produk '{product.nama}' sedang diblokir dan tidak bisa dipesan",
             )
-        if product.stok < item.jumlah:
-            raise HTTPException(status_code=400, detail=f"Stok '{product.nama}' tidak cukup")
+        if product.stok <= 0:
+            raise HTTPException(status_code=400, detail=f"Stock {product.nama} habis")
+        if product.stok < total_diminta[product.id]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Stok '{product.nama}' tidak cukup (tersisa {product.stok})",
+            )
         # Validasi tiap add-on: harus ada, aktif, & milik produk yang sama.
         for aid in (item.addon_ids or []):
             addon = addon_map.get(aid)

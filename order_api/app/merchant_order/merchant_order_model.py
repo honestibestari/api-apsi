@@ -92,9 +92,22 @@ class MerchantOrder(Base):
 
     @property
     def preview_items(self):
-        return ", ".join(
-            f"{i.jumlah}x {i.product.nama}" for i in self.items if i.product
-        )
+        """Ringkasan item, mis. "1x Ayam Geprek (+Extra Keju), 1x Ayam Geprek".
+
+        Add-on ditampilkan per item agar merchant tahu unit mana yang memakai
+        tambahan apa (produk sama bisa dipesan dengan kombinasi add-on berbeda).
+        Pemisah antar add-on memakai " + " (bukan koma) karena FE memecah daftar
+        item dengan ", ".
+        """
+        parts = []
+        for i in self.items:
+            if not i.product:
+                continue
+            label = f"{i.jumlah}x {i.product.nama}"
+            if i.additionals:
+                label += f" (+{i.additionals.replace(', ', ' + ')})"
+            parts.append(label)
+        return ", ".join(parts)
 
     # ── Deadline turunan (untuk warning di FE) ───────────────────────────────
 

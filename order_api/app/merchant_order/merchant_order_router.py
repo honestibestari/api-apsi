@@ -64,10 +64,10 @@ def merchant_dashboard_summary(
 
 @router.get(
     "/report",
-    summary="[Merchant] Unduh laporan penjualan (Excel: mingguan/bulanan/tahunan)",
+    summary="[Merchant] Unduh laporan penjualan (Excel: harian/mingguan/bulanan/tahunan)",
 )
 def download_sales_report(
-    period: str = Query("weekly", description="weekly | monthly | yearly"),
+    period: str = Query("weekly", description="daily | weekly | monthly | yearly"),
     current_merchant: Merchant = Depends(get_current_merchant),
     db: Session = Depends(get_db),
 ):

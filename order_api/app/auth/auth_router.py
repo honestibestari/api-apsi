@@ -72,7 +72,18 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
  
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Email/No HP atau password salah")
- 
+
+    # Merchant baru berstatus PENDING sampai disetujui admin — belum boleh masuk.
+    if (
+        user.role == UserRole.MERCHANT
+        and user.merchant
+        and user.merchant.status == MerchantStatus.PENDING
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Akun merchant Anda masih menunggu persetujuan admin. Silakan coba lagi setelah disetujui.",
+        )
+
     token = create_token(user_id=user.id, role=user.role.value)
  
     response = {
@@ -171,14 +182,15 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         block         = data.block,
         category      = data.category,
         deskripsi     = data.deskripsi,
-        status        = MerchantStatus.ACTIVE,
+        # Akun baru wajib melalui approval admin dulu (pending → active).
+        status        = MerchantStatus.PENDING,
     )
     db.add(merchant)
     db.commit()
     db.refresh(merchant)
 
     return {
-        "message":     "Merchant berhasil didaftarkan",
+        "message":     "Merchant berhasil didaftarkan. Akun Anda akan aktif setelah disetujui admin.",
         "user_id":     user.id,
         "merchant_id": merchant.id,
         "nama":        merchant.nama,

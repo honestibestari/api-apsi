@@ -36,7 +36,7 @@ _BULAN = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
           "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
 
 # Periode laporan penjualan yang didukung.
-_PERIODE_LABEL = {"weekly": "Mingguan", "monthly": "Bulanan", "yearly": "Tahunan"}
+_PERIODE_LABEL = {"daily": "Harian", "weekly": "Mingguan", "monthly": "Bulanan", "yearly": "Tahunan"}
 
 # Transisi status yang diizinkan
 _ALLOWED_TRANSITIONS = {
@@ -326,10 +326,15 @@ def _report_buckets(period: str, today: date) -> Tuple[List[Tuple[str, date, dat
 
     Return (buckets, periode_mulai, periode_selesai) dengan tiap bucket =
     (label, tanggal_mulai, tanggal_selesai) inklusif.
+      - daily   : hari ini saja, satu bucket.
       - weekly  : 7 hari terakhir, bucket per hari.
       - monthly : bulan berjalan (tgl 1 s/d hari ini), bucket per hari.
       - yearly  : tahun berjalan (Jan s/d bulan ini), bucket per bulan.
     """
+    if period == "daily":
+        label = f"{_HARI[today.weekday()]}, {today.strftime('%d/%m/%Y')}"
+        return [(label, today, today)], today, today
+
     if period == "weekly":
         start = today - timedelta(days=6)
         buckets = [
@@ -372,7 +377,7 @@ def build_sales_report(db: Session, merchant: Merchant, period: str) -> Tuple[by
     from openpyxl.utils import get_column_letter
 
     if period not in _PERIODE_LABEL:
-        raise HTTPException(status_code=400, detail="Periode harus weekly, monthly, atau yearly")
+        raise HTTPException(status_code=400, detail="Periode harus daily, weekly, monthly, atau yearly")
 
     today = date.today()
     buckets, periode_mulai, periode_selesai = _report_buckets(period, today)
@@ -467,7 +472,7 @@ def build_sales_report(db: Session, merchant: Merchant, period: str) -> Tuple[by
 
     # Tabel rincian per bucket
     head_row = r + 1
-    bucket_header = {"weekly": "Tanggal", "monthly": "Tanggal", "yearly": "Bulan"}[period]
+    bucket_header = {"daily": "Tanggal", "weekly": "Tanggal", "monthly": "Tanggal", "yearly": "Bulan"}[period]
     headers = [bucket_header, "Jumlah Pesanan", "Pendapatan"]
     for col, h in enumerate(headers, start=1):
         cell = ws.cell(row=head_row, column=col, value=h)
