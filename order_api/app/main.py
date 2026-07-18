@@ -94,9 +94,14 @@ app.include_router(attachment_router)
 app.include_router(platform_setting_router)
 
 # Layani file attachment yang disimpan lokal (fallback tanpa Vercel Blob).
+# Di serverless (Vercel) filesystem read-only → mkdir bisa gagal; lewati mount
+# saja (upload attachment di sana wajib pakai Vercel Blob via BLOB_READ_WRITE_TOKEN).
 _STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
-_STATIC_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+try:
+    _STATIC_DIR.mkdir(parents=True, exist_ok=True)
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+except OSError as exc:
+    print(f"[static] mount /static dilewati (filesystem read-only?): {exc}")
 
 
 # ── Scheduler sweep maintenance order ────────────────────────────────────────
