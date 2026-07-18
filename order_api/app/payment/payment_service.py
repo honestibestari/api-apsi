@@ -375,6 +375,53 @@ def process_tripay_callback(db: Session, raw_body: bytes, signature: str, event:
     return {"success": True}
 
 
+# Throttle auto-refresh fee channel (dipicu GET /payment-methods oleh customer).
+_FEE_REFRESH_INTERVAL = 300.0  # detik
+_fee_refresh = {"ts": 0.0}
+
+
+def refresh_tripay_fees_if_due(db: Session) -> None:
+    """Segarkan fee_flat/fee_percent payment_methods dari Tripay (throttled).
+
+    Antisipasi biaya channel berubah di sisi Tripay tapi admin belum menekan
+    Sinkron: dipanggil tiap customer membuka daftar metode, maksimal 1 fetch per
+    5 menit. Hanya menyentuh fee + menonaktifkan channel yang dimatikan Tripay —
+    tambah/hapus metode tetap lewat sync admin. Gagal fetch = diabaikan
+    (tampilan pakai nilai tersimpan; fee TERTAGIH selalu dari respons create
+    transaction, jadi tagihan tidak pernah ikut basi).
+    """
+    if not tripay_client.is_configured():
+        return
+    now = time.monotonic()
+    if now - _fee_refresh["ts"] < _FEE_REFRESH_INTERVAL:
+        return
+    _fee_refresh["ts"] = now
+    try:
+        raw = tripay_client.get_payment_channels()
+    except Exception:
+        return
+    by_code = {(ch.get("code") or "").upper(): ch for ch in raw}
+    rows = db.query(PaymentMethod).filter(PaymentMethod.tripay_code.isnot(None)).all()
+    changed = False
+    for row in rows:
+        ch = by_code.get(row.tripay_code)
+        if not ch:
+            continue
+        fee_cust = ch.get("fee_customer") or {}
+        fee_flat = float(fee_cust.get("flat") or 0)
+        fee_percent = float(fee_cust.get("percent") or 0)
+        if row.fee_flat != fee_flat or row.fee_percent != fee_percent:
+            row.fee_flat = fee_flat
+            row.fee_percent = fee_percent
+            changed = True
+        if not bool(ch.get("active", True)) and row.is_active:
+            # Channel dimatikan di Tripay → jangan tawarkan (charge pasti gagal).
+            row.is_active = False
+            changed = True
+    if changed:
+        db.commit()
+
+
 # Cache daftar channel Tripay (module-level; hemat kuota API, FE boleh sering fetch).
 _CHANNELS_CACHE_TTL = 300.0  # detik
 _channels_cache: dict = {"ts": 0.0, "data": []}

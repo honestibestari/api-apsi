@@ -107,7 +107,13 @@ def sync_tripay(db: Session = Depends(get_db), _=Depends(require_admin)):
 
 @router.get("", response_model=List[PaymentMethodOut], summary="List metode pembayaran")
 def list_payment_methods(db: Session = Depends(get_db)):
-    """Bisa diakses semua orang — customer perlu lihat ini saat checkout."""
+    """Bisa diakses semua orang — customer perlu lihat ini saat checkout.
+
+    Sekalian auto-refresh fee channel dari Tripay (throttled 5 menit) supaya
+    estimasi biaya yang dilihat customer tidak basi meski admin belum sinkron.
+    """
+    from app.payment import payment_service
+    payment_service.refresh_tripay_fees_if_due(db)
     return db.query(PaymentMethod).all()
 
 
