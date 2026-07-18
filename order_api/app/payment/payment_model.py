@@ -1,7 +1,7 @@
 import enum
 import secrets
 
-from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -37,13 +37,24 @@ class Payment(Base):
     qrcode_kode_url      = Column(String(500), nullable=True)
     timestamp            = Column(DateTime(timezone=True), server_default=func.now())
 
-    # ── Field bergaya gateway (dipakai dummy, siap untuk Midtrans/Flip) ──────────
-    # Diisi saat charge; bentuknya meniru respons gateway agar nanti tinggal swap.
+    # ── Field bergaya gateway (dipakai dummy & Tripay) ───────────────────────────
+    # Diisi saat charge; bentuknya meniru respons gateway agar tinggal swap.
+    # Tripay: transaction_id←reference, qrcode_kode_url←qr_string,
+    # va_number←pay_code, payment_url←checkout_url, expires_at←expired_time.
     transaction_id       = Column(String(64), nullable=True, index=True)
     payment_url          = Column(String(500), nullable=True)   # type=redirect
     va_number            = Column(String(40), nullable=True)    # type=va
     expires_at           = Column(DateTime(timezone=True), nullable=True)
     paid_at              = Column(DateTime(timezone=True), nullable=True)
+
+    # Gateway yang membuat transaksi ini: "dummy" | "tripay". Baris lama NULL = dummy.
+    gateway              = Column(String(20), nullable=True)
+    # Fee channel gateway yang dibebankan ke customer. SUDAH termasuk di `nominal`
+    # (nominal = total order + fee). Subtotal order = nominal − fee.
+    fee                  = Column(Float, nullable=False, default=0.0, server_default="0")
+    # Instruksi cara bayar dari gateway (JSON list of string). NULL → pakai
+    # instruksi generik per tipe.
+    instructions_json    = Column(Text, nullable=True)
 
     # Relasi
     pesanan = relationship("CustomerOrder")

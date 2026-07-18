@@ -18,22 +18,30 @@ def seed_payment_methods(db):
     Tidak menghapus/menimpa yang sudah ada, jadi tidak menyentuh data ber-FK
     maupun perubahan dari admin.
     """
-    canonical = [
-        "QRIS",
-        "Tunai",          # → type "manual": flow langsung selesai
-        "Transfer Bank",
-        "GoPay",
-        "OVO",
-    ]
-    existing = {m.nama_metode.lower() for m in db.query(PaymentMethod).all()}
-    added = 0
-    for nama in canonical:
-        if nama.lower() not in existing:
-            db.add(PaymentMethod(nama_metode=nama, is_active=True))
-            added += 1
-    if added:
+    # nama → kode channel Tripay (None = metode lokal / dihubungkan manual oleh
+    # admin lewat PATCH /payment-methods/{id} sesuai channel aktif di akun Tripay).
+    canonical = {
+        "QRIS":          "QRIS",
+        "Tunai":         None,   # → type "manual": flow langsung selesai
+        "Transfer Bank": None,
+        "GoPay":         None,
+        "OVO":           None,
+    }
+    existing = {m.nama_metode.lower(): m for m in db.query(PaymentMethod).all()}
+    changed = 0
+    for nama, tripay_code in canonical.items():
+        row = existing.get(nama.lower())
+        if not row:
+            db.add(PaymentMethod(nama_metode=nama, is_active=True, tripay_code=tripay_code))
+            changed += 1
+        elif tripay_code and not row.tripay_code:
+            # Backfill baris lama (kolom tripay_code baru ditambahkan) — hanya
+            # mengisi yang masih kosong, tidak menimpa setelan admin.
+            row.tripay_code = tripay_code
+            changed += 1
+    if changed:
         db.commit()
-        print(f"[OK] {added} metode pembayaran ditambahkan")
+        print(f"[OK] {changed} metode pembayaran ditambahkan/diperbarui")
 
 
 def seed_platform_settings(db):

@@ -59,6 +59,19 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     google_refresh_token: str = ""
 
+    # ─── Payment gateway ─────────────────────────────────
+    # Pilih gateway aktif: "dummy" (simulasi, tanpa uang asli) atau "tripay".
+    # Saat "tripay", endpoint simulate-paid & auto-settle dummy dinonaktifkan.
+    payment_gateway: str = "dummy"
+
+    # Kredensial Tripay (dari dashboard Tripay → Merchant → API). HANYA di .env
+    # backend — jangan pernah ditaruh di frontend.
+    tripay_api_key: str = ""
+    tripay_private_key: str = ""
+    tripay_merchant_code: str = ""
+    # "sandbox" (uji coba, tripay.co.id/api-sandbox) atau "production".
+    tripay_mode: str = "sandbox"
+
     # ─── Pembayaran (mode dummy) ─────────────────────────
     # Selama belum ada gateway asli: pembayaran non-tunai yang masih PENDING akan
     # otomatis dianggap LUNAS setelah sekian detik (disimulasikan saat FE polling

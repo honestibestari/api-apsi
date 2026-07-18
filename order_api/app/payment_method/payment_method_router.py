@@ -32,7 +32,10 @@ def create_payment_method(
     ).first()
     if existing:
         raise HTTPException(409, f"Metode '{data.nama_metode}' sudah ada")
-    pm = PaymentMethod(nama_metode=data.nama_metode)
+    pm = PaymentMethod(
+        nama_metode=data.nama_metode,
+        tripay_code=(data.tripay_code or "").strip().upper() or None,
+    )
     db.add(pm)
     db.commit()
     db.refresh(pm)
@@ -64,6 +67,9 @@ def update_payment_method(
         pm.nama_metode = nama
     if data.is_active is not None:
         pm.is_active = data.is_active
+    if data.tripay_code is not None:
+        # "" (string kosong) = lepas kode; selain itu dinormalkan ke uppercase.
+        pm.tripay_code = data.tripay_code.strip().upper() or None
 
     db.commit()
     db.refresh(pm)

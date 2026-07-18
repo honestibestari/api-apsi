@@ -26,7 +26,10 @@ class ChargeResponse(BaseModel):
     status:         StatusPembayaran
     method:         str                  # nama metode (mis. "QRIS", "BCA")
     type:           str                  # qr | va | redirect | manual
-    nominal:        float
+    gateway:        str = "dummy"        # dummy | tripay — FE pakai untuk sembunyikan tombol simulasi
+    nominal:        float                # total ditagih ke customer (subtotal + fee)
+    fee:            float = 0.0          # fee channel gateway yang dibebankan ke customer
+    subtotal:       Optional[float] = None  # nominal − fee (total order)
     qr_string:      Optional[str] = None
     va_number:      Optional[str] = None
     bank:           Optional[str] = None
@@ -38,6 +41,22 @@ class ChargeResponse(BaseModel):
     order_code:     str
     no_meja:        Optional[str] = None
     created_at:     Optional[datetime] = None
+
+
+class GatewayChannelOut(BaseModel):
+    """Channel pembayaran gateway + struktur fee yang ditanggung customer.
+
+    Dipakai FE untuk menampilkan estimasi biaya per metode sebelum charge.
+    fee = fee_flat + fee_percent% × nominal (dibatasi minimum/maximum bila ada).
+    """
+    code:        str
+    name:        str
+    group:       Optional[str] = None
+    active:      bool = True
+    fee_flat:    float = 0.0
+    fee_percent: float = 0.0
+    minimum_fee: Optional[float] = None
+    maximum_fee: Optional[float] = None
 
 
 class PaymentCreate(BaseModel):

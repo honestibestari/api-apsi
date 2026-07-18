@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -10,6 +10,7 @@ from app.payment.payment_model import StatusPembayaran
 from app.payment.payment_schema import (
     ChargeRequest,
     ChargeResponse,
+    GatewayChannelOut,
     PaymentCreate,
     PaymentOut,
 )
@@ -17,12 +18,32 @@ from app.payment.payment_schema import (
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
 
-# ── Dummy gateway flow (siap di-swap ke Midtrans/Flip) ──────────────────────
+# ── Gateway flow (PAYMENT_GATEWAY=dummy → simulasi; =tripay → transaksi asli) ─
 
 @router.post("/charge", response_model=ChargeResponse, status_code=status.HTTP_201_CREATED,
-             summary="Buat transaksi pembayaran (dummy gateway)")
+             summary="Buat transaksi pembayaran (dummy / Tripay sesuai PAYMENT_GATEWAY)")
 def charge(data: ChargeRequest, db: Session = Depends(get_db)):
     return payment_service.charge(db, data.id_pesanan, data.metode_pembayaran_id)
+
+
+@router.get("/channels", response_model=List[GatewayChannelOut],
+            summary="Daftar channel gateway + fee (kosong di mode dummy)")
+def list_gateway_channels():
+    """Customer melihat estimasi biaya per channel sebelum memilih metode."""
+    return payment_service.list_gateway_channels()
+
+
+@router.post("/webhook/tripay", summary="Webhook status transaksi dari Tripay")
+async def tripay_webhook(request: Request, db: Session = Depends(get_db)):
+    """Dipanggil server Tripay saat status transaksi berubah (PAID/EXPIRED/FAILED).
+
+    Signature diverifikasi dari RAW body (HMAC-SHA256 private key) — jangan
+    di-parse dulu. URL ini juga harus didaftarkan di dashboard Tripay.
+    """
+    raw = await request.body()
+    signature = request.headers.get("X-Callback-Signature", "")
+    event = request.headers.get("X-Callback-Event", "")
+    return payment_service.process_tripay_callback(db, raw, signature, event)
 
 
 @router.get("/status/{token}", response_model=ChargeResponse,
@@ -32,7 +53,7 @@ def charge_status(token: str, db: Session = Depends(get_db)):
 
 
 @router.post("/status/{token}/simulate-paid", response_model=ChargeResponse,
-             summary="Tandai LUNAS via token (pengganti webhook gateway, fase dummy)")
+             summary="Tandai LUNAS via token (hanya aktif saat PAYMENT_GATEWAY=dummy)")
 def simulate_paid(token: str, db: Session = Depends(get_db)):
     return payment_service.simulate_paid(db, token)
 
