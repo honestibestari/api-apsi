@@ -161,6 +161,12 @@ def charge(db: Session, id_pesanan: int, metode_pembayaran_id: int) -> ChargeRes
     order = db.query(CustomerOrder).filter(CustomerOrder.id == id_pesanan).first()
     if not order:
         raise HTTPException(404, "Pesanan tidak ditemukan")
+    # Jangan buat tagihan (apalagi transaksi gateway asli) untuk pesanan yang
+    # sudah tidak bisa dilanjutkan — mis. dibatalkan sweep karena lewat batas bayar.
+    if order.status == CustomerOrderStatus.CANCELLED:
+        raise HTTPException(400, "Pesanan sudah dibatalkan (melewati batas waktu pembayaran). Silakan buat pesanan baru.")
+    if order.status == CustomerOrderStatus.DONE:
+        raise HTTPException(400, "Pesanan sudah selesai")
 
     metode = db.query(PaymentMethod).filter(PaymentMethod.id == metode_pembayaran_id).first()
     if not metode:

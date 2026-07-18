@@ -26,6 +26,7 @@ from app.merchant_order.merchant_order_model import (
     NotifikasiTipe,
     OrderItem,
 )
+from app.payment.payment_model import Payment, StatusPembayaran
 from app.platform_setting import platform_setting_service as fee_svc
 from app.refund.refund_model import Refund, StatusRefund
 
@@ -52,7 +53,16 @@ def _is_past(ref, secs: int) -> bool:
 # ── Tahap-tahap sweep ──────────────────────────────────────────────────────────
 
 def _expire_unpaid_orders(db: Session) -> int:
-    """Batalkan order 'verifying' yang melewati batas pembayaran; lepaskan stok."""
+    """Batalkan order 'verifying' yang melewati batas pembayaran; lepaskan stok.
+
+    Dua pengaman uang-asli sebelum membatalkan:
+      • Ada pembayaran LUNAS → JANGAN batalkan; pulihkan transisi settle yang
+        hilang (verifying→open) — antisipasi race webhook vs sweep.
+      • Ada tagihan gateway (Tripay) PENDING yang belum kedaluwarsa → tunda;
+        customer masih bisa membayar QR/VA itu (mis. setelah 'Ganti Metode',
+        tagihan baru berlaku 15 mnt dari charge, bukan dari order dibuat).
+        Sumber kebenaran kedaluwarsa = expires_at dari Tripay.
+    """
     secs = settings.customer_pay_timeout_seconds
     if secs <= 0:
         return 0
@@ -66,10 +76,31 @@ def _expire_unpaid_orders(db: Session) -> int:
         .filter(CustomerOrder.status == CustomerOrderStatus.VERIFYING)
         .all()
     )
+    now = _now()
     n = 0
     for order in orders:
         if not _is_past(order.created_at, secs):
             continue
+
+        payments = db.query(Payment).filter(Payment.id_pesanan == order.id).all()
+
+        if any(p.status_pembayaran == StatusPembayaran.LUNAS for p in payments):
+            order.status = CustomerOrderStatus.OPEN
+            for mo in order.merchant_orders:
+                if mo.status == MerchantOrderStatus.BARU:
+                    mo.status = MerchantOrderStatus.TERBUKA
+            continue
+
+        gateway_masih_aktif = any(
+            p.status_pembayaran == StatusPembayaran.PENDING
+            and (p.gateway or "") == "tripay"
+            and _aware(p.expires_at) is not None
+            and _aware(p.expires_at) > now
+            for p in payments
+        )
+        if gateway_masih_aktif:
+            continue
+
         for mo in order.merchant_orders:
             co_svc.cancel_merchant_order(db, mo)
         order.status = CustomerOrderStatus.CANCELLED

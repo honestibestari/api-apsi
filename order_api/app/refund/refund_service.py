@@ -2,6 +2,7 @@ from typing import List, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.refund.refund_model import Refund, StatusRefund
 from app.refund.refund_schema import RefundCreate
 
@@ -30,10 +31,13 @@ def get_refund_by_order(db: Session, order_id: int) -> Optional[Refund]:
 def process_refund_choice(
     db: Session, order_id: int, metode_refund: str, nomor_tujuan: str
 ) -> Refund:
-    """Customer memilih metode e-wallet → refund langsung diselesaikan.
+    """Customer memilih metode + nomor e-wallet tujuan refund.
 
-    Logika pengiriman uang DI-BYPASS (fase dummy): begitu metode dipilih, status
-    langsung DISETUJUI (dianggap selesai).
+    Mode dummy   : transfer di-bypass → status langsung DISETUJUI (demo).
+    Mode gateway : uang ASLI — status tetap PENDING; pengelola mentransfer
+    manual ke e-wallet tujuan lalu menandai selesai via
+    PUT /refunds/{id}/status (admin). Customer boleh mengoreksi metode/nomor
+    selama masih PENDING.
     """
     refund = get_refund_by_order(db, order_id)
     if not refund:
@@ -47,7 +51,8 @@ def process_refund_choice(
 
     refund.metode_refund = metode_refund
     refund.nomor_tujuan = nomor_tujuan.strip()
-    refund.status = StatusRefund.DISETUJUI  # bypass transfer → langsung selesai
+    if settings.payment_gateway.lower() == "dummy":
+        refund.status = StatusRefund.DISETUJUI  # demo: transfer di-bypass
     db.commit()
     db.refresh(refund)
     return refund
