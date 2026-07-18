@@ -268,6 +268,10 @@ def _auto_settle_if_due(db: Session, payment: Payment) -> None:
 # Throttle rekonsiliasi aktif ke Tripay per payment (in-memory, cukup untuk
 # deployment single-process). FE polling tiap 3 dtk; kita cek ke Tripay maks
 # 1x per interval ini agar tidak membanjiri API mereka.
+# CATATAN sentinel: semua throttle di file ini pakai None (bukan 0.0) sebagai
+# tanda "belum pernah jalan" — time.monotonic() di instance serverless yang
+# baru boot bisa < interval, sehingga `now - 0.0 < interval` keliru dianggap
+# "baru saja dicek" dan fetch pertama tak pernah terjadi.
 _TRIPAY_RECONCILE_INTERVAL = 15.0  # detik
 _tripay_last_check: dict[int, float] = {}
 
@@ -300,8 +304,8 @@ def _reconcile_tripay_if_needed(db: Session, payment: Payment) -> None:
     ):
         return
     now = time.monotonic()
-    last = _tripay_last_check.get(payment.id, 0.0)
-    if now - last < _TRIPAY_RECONCILE_INTERVAL:
+    last = _tripay_last_check.get(payment.id)
+    if last is not None and now - last < _TRIPAY_RECONCILE_INTERVAL:
         return
     _tripay_last_check[payment.id] = now
     try:
@@ -377,7 +381,7 @@ def process_tripay_callback(db: Session, raw_body: bytes, signature: str, event:
 
 # Throttle auto-refresh fee channel (dipicu GET /payment-methods oleh customer).
 _FEE_REFRESH_INTERVAL = 300.0  # detik
-_fee_refresh = {"ts": 0.0}
+_fee_refresh: dict = {"ts": None}
 
 
 def refresh_tripay_fees_if_due(db: Session) -> None:
@@ -393,7 +397,7 @@ def refresh_tripay_fees_if_due(db: Session) -> None:
     if not tripay_client.is_configured():
         return
     now = time.monotonic()
-    if now - _fee_refresh["ts"] < _FEE_REFRESH_INTERVAL:
+    if _fee_refresh["ts"] is not None and now - _fee_refresh["ts"] < _FEE_REFRESH_INTERVAL:
         return
     _fee_refresh["ts"] = now
     try:
@@ -424,7 +428,7 @@ def refresh_tripay_fees_if_due(db: Session) -> None:
 
 # Cache daftar channel Tripay (module-level; hemat kuota API, FE boleh sering fetch).
 _CHANNELS_CACHE_TTL = 300.0  # detik
-_channels_cache: dict = {"ts": 0.0, "data": []}
+_channels_cache: dict = {"ts": None, "data": []}
 
 
 def list_gateway_channels(db: Optional[Session] = None) -> List[GatewayChannelOut]:
@@ -438,7 +442,7 @@ def list_gateway_channels(db: Optional[Session] = None) -> List[GatewayChannelOu
     if settings.payment_gateway.lower() != "tripay" or not tripay_client.is_configured():
         return []
     now = time.monotonic()
-    if now - _channels_cache["ts"] < _CHANNELS_CACHE_TTL:
+    if _channels_cache["ts"] is not None and now - _channels_cache["ts"] < _CHANNELS_CACHE_TTL:
         return _channels_cache["data"]
     try:
         raw = tripay_client.get_payment_channels()
