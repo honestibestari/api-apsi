@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String
+from sqlalchemy import Boolean, Column, Float, Integer, String
 
 from app.core.database import Base
 
@@ -14,4 +14,9 @@ class PaymentMethod(Base):
     # NULL = metode lokal tanpa gateway (mis. Tunai) / belum dihubungkan —
     # saat PAYMENT_GATEWAY=tripay, metode non-tunai tanpa kode ini ditolak charge.
     tripay_code = Column(String(30), nullable=True)
+    # Struktur fee channel yang ditanggung customer (disalin saat sync dari
+    # Tripay; hanya informasi tampilan — fee final tetap dari respons create
+    # transaction). fee = fee_flat + fee_percent% × nominal.
+    fee_flat    = Column(Float, nullable=True)
+    fee_percent = Column(Float, nullable=True)
     # Data awal: QRIS, Tunai, Transfer Bank, OVO, GoPay

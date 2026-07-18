@@ -29,5 +29,15 @@ class PaymentMethodOut(BaseModel):
     id:          int
     nama_metode: str
     is_active:   bool
-    tripay_code: Optional[str] = None
+    tripay_code: Optional[str]   = None
+    fee_flat:    Optional[float] = None
+    fee_percent: Optional[float] = None
     model_config = ConfigDict(from_attributes=True)
+
+
+class TripaySyncResult(BaseModel):
+    """Hasil sinkronisasi metode pembayaran dari daftar channel Tripay."""
+    added:       int
+    updated:     int
+    deactivated: int
+    methods:     list[PaymentMethodOut]
