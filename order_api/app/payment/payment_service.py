@@ -380,10 +380,13 @@ _CHANNELS_CACHE_TTL = 300.0  # detik
 _channels_cache: dict = {"ts": 0.0, "data": []}
 
 
-def list_gateway_channels() -> List[GatewayChannelOut]:
+def list_gateway_channels(db: Optional[Session] = None) -> List[GatewayChannelOut]:
     """Daftar channel Tripay aktif + struktur fee (untuk ditampilkan ke customer).
 
     Mode dummy / kredensial kosong → list kosong (FE tampilkan 'tanpa biaya').
+    Bila fetch live ke Tripay gagal → fallback ke fee hasil sync yang tersimpan
+    di payment_methods (kolom fee_flat/fee_percent), agar customer tetap melihat
+    estimasi biaya.
     """
     if settings.payment_gateway.lower() != "tripay" or not tripay_client.is_configured():
         return []
@@ -393,7 +396,16 @@ def list_gateway_channels() -> List[GatewayChannelOut]:
     try:
         raw = tripay_client.get_payment_channels()
     except Exception:
-        return _channels_cache["data"]  # gagal fetch → pakai cache lama (bisa kosong)
+        if _channels_cache["data"] or db is None:
+            return _channels_cache["data"]  # pakai cache lama bila ada
+        rows = db.query(PaymentMethod).filter(PaymentMethod.tripay_code.isnot(None)).all()
+        return [GatewayChannelOut(
+            code        = r.tripay_code,
+            name        = r.nama_metode,
+            active      = r.is_active,
+            fee_flat    = float(r.fee_flat or 0),
+            fee_percent = float(r.fee_percent or 0),
+        ) for r in rows]
     channels = []
     for ch in raw:
         fee_cust = ch.get("fee_customer") or {}

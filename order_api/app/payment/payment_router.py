@@ -28,9 +28,9 @@ def charge(data: ChargeRequest, db: Session = Depends(get_db)):
 
 @router.get("/channels", response_model=List[GatewayChannelOut],
             summary="Daftar channel gateway + fee (kosong di mode dummy)")
-def list_gateway_channels():
+def list_gateway_channels(db: Session = Depends(get_db)):
     """Customer melihat estimasi biaya per channel sebelum memilih metode."""
-    return payment_service.list_gateway_channels()
+    return payment_service.list_gateway_channels(db)
 
 
 @router.post("/webhook/tripay", summary="Webhook status transaksi dari Tripay")

@@ -39,5 +39,6 @@ class TripaySyncResult(BaseModel):
     """Hasil sinkronisasi metode pembayaran dari daftar channel Tripay."""
     added:       int
     updated:     int
-    deactivated: int
+    removed:     int   # dihapus karena tidak ada di daftar channel Tripay
+    deactivated: int   # tak bisa dihapus (dipakai riwayat transaksi) → dinonaktifkan
     methods:     list[PaymentMethodOut]

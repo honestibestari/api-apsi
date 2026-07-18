@@ -19,14 +19,16 @@ router = APIRouter(prefix="/payment-methods", tags=["Payment Methods"])
 @router.post("/sync-tripay", response_model=TripaySyncResult,
              summary="Sinkronkan metode pembayaran dari channel Tripay (admin)")
 def sync_tripay(db: Session = Depends(get_db), _=Depends(require_admin)):
-    """Tarik daftar channel dari akun Tripay lalu upsert ke payment_methods.
+    """Tarik daftar channel dari akun Tripay lalu samakan payment_methods dengannya.
 
     Aturan:
       • Channel baru → dibuat NONAKTIF (admin tinggal mengaktifkan).
       • Channel yang sudah ada (match tripay_code, atau nama untuk adopsi baris
-        lama) → nama & struktur fee di-update mengikuti Tripay.
-      • Channel yang nonaktif/hilang di Tripay → metode ikut dinonaktifkan.
-      • Metode lokal tanpa tripay_code (mis. Tunai) tidak disentuh.
+        lama) → nama & struktur fee di-update mengikuti Tripay; channel yang
+        dimatikan di sisi Tripay ikut dinonaktifkan di sini.
+      • Metode yang TIDAK ada di daftar channel Tripay → DIHAPUS. Kecuali:
+        Tunai/cash (metode kasir lokal, bukan channel gateway) dan metode yang
+        sudah dipakai riwayat transaksi (FK payments/orders) — itu dinonaktifkan.
     Bisa dijalankan meski PAYMENT_GATEWAY masih dummy — cukup kredensial terisi,
     jadi katalog bisa disiapkan sebelum gateway diaktifkan.
     """
@@ -39,14 +41,13 @@ def sync_tripay(db: Session = Depends(get_db), _=Depends(require_admin)):
     by_code = {r.tripay_code: r for r in rows if r.tripay_code}
     by_name = {r.nama_metode.lower(): r for r in rows}
 
-    added = updated = deactivated = 0
-    seen_codes = set()
+    added = updated = removed = deactivated = 0
+    matched_ids = set()
     for ch in channels:
         code = (ch.get("code") or "").upper()
         name = (ch.get("name") or code).strip()
         if not code:
             continue
-        seen_codes.add(code)
         fee_cust = ch.get("fee_customer") or {}
         fee_flat = float(fee_cust.get("flat") or 0)
         fee_percent = float(fee_cust.get("percent") or 0)
@@ -58,6 +59,7 @@ def sync_tripay(db: Session = Depends(get_db), _=Depends(require_admin)):
                                 is_active=False,  # admin yang memutuskan aktif
                                 fee_flat=fee_flat, fee_percent=fee_percent)
             db.add(row)
+            db.flush()
             added += 1
         else:
             row.tripay_code = code
@@ -69,19 +71,37 @@ def sync_tripay(db: Session = Depends(get_db), _=Depends(require_admin)):
             row.fee_percent = fee_percent
             if not ch_active and row.is_active:
                 row.is_active = False
-                deactivated += 1
             updated += 1
         by_name[name.lower()] = row
+        matched_ids.add(row.id)
 
-    # Channel yang hilang dari akun Tripay → nonaktifkan metode terkait.
-    for code, row in by_code.items():
-        if code not in seen_codes and row.is_active:
-            row.is_active = False
+    # Metode di luar daftar channel Tripay → hapus (kecuali Tunai/cash).
+    # Yang sudah direferensikan riwayat transaksi tidak bisa dihapus tanpa
+    # merusak data (FK payments.metode_pembayaran_id & customer_orders.…) →
+    # dinonaktifkan saja.
+    from app.customer_order.customer_order_model import CustomerOrder
+    from app.payment.payment_model import Payment
+    for row in rows:
+        if row.id in matched_ids:
+            continue
+        nama = (row.nama_metode or "").lower()
+        if "tunai" in nama or "cash" in nama:
+            continue  # metode kasir lokal, bukan urusan gateway
+        dipakai = (
+            db.query(Payment.id).filter(Payment.metode_pembayaran_id == row.id).first()
+            or db.query(CustomerOrder.id).filter(CustomerOrder.metode_pembayaran_id == row.id).first()
+        )
+        if dipakai:
+            if row.is_active:
+                row.is_active = False
             deactivated += 1
+        else:
+            db.delete(row)
+            removed += 1
 
     db.commit()
     methods = db.query(PaymentMethod).order_by(PaymentMethod.id).all()
-    return TripaySyncResult(added=added, updated=updated,
+    return TripaySyncResult(added=added, updated=updated, removed=removed,
                             deactivated=deactivated, methods=methods)
 
 
