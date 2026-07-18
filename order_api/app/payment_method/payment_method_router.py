@@ -176,6 +176,23 @@ def delete_payment_method(
     pm = db.query(PaymentMethod).filter(PaymentMethod.id == pm_id).first()
     if not pm:
         raise HTTPException(404, "Metode pembayaran tidak ditemukan")
+
+    # Metode yang sudah direferensikan riwayat transaksi tidak bisa dihapus
+    # (FK payments/customer_orders akan melanggar) → beri 409 yang jelas,
+    # jangan biarkan IntegrityError jadi 500 tanpa header CORS.
+    from app.customer_order.customer_order_model import CustomerOrder
+    from app.payment.payment_model import Payment
+    dipakai = (
+        db.query(Payment.id).filter(Payment.metode_pembayaran_id == pm_id).first()
+        or db.query(CustomerOrder.id).filter(CustomerOrder.metode_pembayaran_id == pm_id).first()
+    )
+    if dipakai:
+        raise HTTPException(
+            409,
+            f"Metode '{pm.nama_metode}' masih dipakai riwayat transaksi — "
+            "tidak bisa dihapus. Nonaktifkan saja metode ini.",
+        )
+
     db.delete(pm)
     db.commit()
     return {"message": f"Metode '{pm.nama_metode}' berhasil dihapus"}
